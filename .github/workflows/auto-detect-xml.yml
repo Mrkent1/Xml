@@ -1,0 +1,212 @@
+name: Auto Detect XML Templates & Build EXE
+
+on:
+  push:
+    paths:
+      - 'original_templates/**/*.xml'
+      - 'xml_templates/**/*.xml'
+      - 'templates/**/*.xml'
+      - '*.xml'
+    branches: [ main, master ]
+  workflow_dispatch:
+    inputs:
+      force_build:
+        description: 'Force build even without XML changes'
+        required: false
+        default: 'false'
+
+jobs:
+  detect-xml:
+    runs-on: ubuntu-latest
+    outputs:
+      has_xml_changes: ${{ steps.check-xml.outputs.has_changes }}
+      xml_count: ${{ steps.check-xml.outputs.xml_count }}
+      xml_files: ${{ steps.check-xml.outputs.xml_files }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Lấy toàn bộ lịch sử để so sánh
+    
+    - name: Check XML changes
+      id: check-xml
+      run: |
+        echo "🔍 Kiểm tra thay đổi file XML..."
+        
+        # Lấy danh sách file XML hiện tại
+        CURRENT_XML=$(find . -name "*.xml" -type f | grep -E "(original_templates|xml_templates|templates)" | sort)
+        echo "📁 File XML hiện tại:"
+        echo "$CURRENT_XML"
+        
+        # Đếm số file XML
+        XML_COUNT=$(echo "$CURRENT_XML" | wc -l)
+        echo "📊 Tổng số file XML: $XML_COUNT"
+        
+        # Kiểm tra thay đổi so với commit trước
+        if [ "${{ github.event_name }}" = "push" ]; then
+          PREV_COMMIT="${{ github.event.before }}"
+          CURRENT_COMMIT="${{ github.sha }}"
+          
+          echo "🔄 So sánh commit: $PREV_COMMIT -> $CURRENT_COMMIT"
+          
+          # Lấy file XML đã thay đổi
+          CHANGED_XML=$(git diff --name-only $PREV_COMMIT $CURRENT_COMMIT | grep "\.xml$" | grep -E "(original_templates|xml_templates|templates)")
+          
+          if [ -n "$CHANGED_XML" ]; then
+            echo "✅ Phát hiện thay đổi file XML:"
+            echo "$CHANGED_XML"
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "ℹ️ Không có thay đổi file XML"
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          fi
+        else
+          echo "🔄 Manual trigger - bỏ qua kiểm tra thay đổi"
+          echo "has_changes=true" >> $GITHUB_OUTPUT
+        fi
+        
+        echo "xml_count=$XML_COUNT" >> $GITHUB_OUTPUT
+        echo "xml_files<<EOF" >> $GITHUB_OUTPUT
+        echo "$CURRENT_XML" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+        
+        echo "✅ Hoàn tất kiểm tra XML!"
+    
+    - name: Show XML info
+      run: |
+        echo "📊 THÔNG TIN XML PHÁT HIỆN:"
+        echo "Có thay đổi: ${{ steps.check-xml.outputs.has_xml_changes }}"
+        echo "Số file: ${{ steps.check-xml.outputs.xml_count }}"
+        echo "Danh sách file:"
+        echo "${{ steps.check-xml.outputs.xml_files }}"
+
+  build-exe:
+    needs: detect-xml
+    if: needs.detect-xml.outputs.has_xml_changes == 'true' || github.event.inputs.force_build == 'true'
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyinstaller
+        pip install customtkinter
+        pip install watchdog
+        pip install requests
+        pip install psutil
+    
+    - name: Prepare templates directory
+      run: |
+        echo "📁 Chuẩn bị thư mục templates..."
+        
+        # Tạo thư mục templates nếu chưa có
+        mkdir -p templates
+        
+        # Copy tất cả file XML gốc vào templates
+        echo "📋 Copy file XML gốc vào templates..."
+        
+        # Copy từ original_templates
+        if [ -d "original_templates" ]; then
+          echo "📁 Copy từ original_templates..."
+          cp -r original_templates/* templates/ 2>/dev/null || true
+        fi
+        
+        # Copy từ xml_templates
+        if [ -d "xml_templates" ]; then
+          echo "📁 Copy từ xml_templates..."
+          cp -r xml_templates/* templates/ 2>/dev/null || true
+        fi
+        
+        # Copy file XML trực tiếp
+        echo "📄 Copy file XML trực tiếp..."
+        find . -maxdepth 1 -name "*.xml" -exec cp {} templates/ \;
+        
+        # Hiển thị nội dung templates
+        echo "📋 Nội dung thư mục templates:"
+        ls -la templates/
+        
+        # Đếm file XML
+        XML_COUNT=$(find templates/ -name "*.xml" | wc -l)
+        echo "📊 Tổng số file XML trong templates: $XML_COUNT"
+    
+    - name: Build EXE with PyInstaller
+      run: |
+        echo "🚀 Bắt đầu build EXE..."
+        pyinstaller --onefile --noconsole --add-data "templates;templates" --name "XMLProcessor" icon3.py
+        
+        echo "✅ Build EXE hoàn tất!"
+        echo "📁 Kiểm tra kết quả:"
+        ls -la dist/
+    
+    - name: Upload EXE artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: XMLProcessor-EXE
+        path: dist/XMLProcessor.exe
+    
+    - name: Create Release
+      if: github.event_name == 'workflow_dispatch'
+      uses: softprops/action-gh-release@v1
+      with:
+        files: dist/XMLProcessor.exe
+        tag_name: v${{ github.run_number }}
+        name: Release v${{ github.run_number }} - Auto XML Detection
+        body: |
+          🚀 **XMLProcessor EXE Build - Tự động nhận diện XML**
+          
+          **Build Info:**
+          - Commit: ${{ github.sha }}
+          - Branch: ${{ github.ref }}
+          - Build Number: ${{ github.run_number }}
+          - XML Files: ${{ needs.detect-xml.outputs.xml_count }}
+          
+          **XML Files Detected:**
+          ```
+          ${{ needs.detect-xml.outputs.xml_files }}
+          ```
+          
+          **Features:**
+          - ✅ No Console (--noconsole)
+          - ✅ Single File (--onefile)
+          - ✅ Templates included (Auto-detected)
+          - ✅ Smart XML overwrite
+          - ✅ Telegram bot integration
+          
+          **Download:**
+          - File: `XMLProcessor.exe`
+          - Size: See artifact above
+          
+          **Auto-detection:**
+          - 🔍 Tự động nhận diện file XML gốc
+          - 📁 Tự động copy vào templates
+          - 🚀 Tự động build khi có thay đổi XML
+
+  notify-telegram:
+    needs: [detect-xml, build-exe]
+    if: always()
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Notify Telegram
+      run: |
+        echo "📱 Gửi thông báo Telegram..."
+        
+        # Thông báo kết quả build
+        if [ "${{ needs.build-exe.result }}" = "success" ]; then
+          echo "🎉 BUILD THÀNH CÔNG!"
+          echo "📊 XML Files: ${{ needs.detect-xml.outputs.xml_count }}"
+          echo "📁 Files: ${{ needs.detect-xml.outputs.xml_files }}"
+        else
+          echo "❌ BUILD THẤT BẠI!"
+        fi
+        
+        echo "✅ Hoàn tất thông báo!"
