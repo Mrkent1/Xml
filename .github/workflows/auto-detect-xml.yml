@@ -148,7 +148,7 @@ jobs:
         ls -la dist/
     
     - name: Upload EXE artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: XMLProcessor-EXE
         path: dist/XMLProcessor.exe
