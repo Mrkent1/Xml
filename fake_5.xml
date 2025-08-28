@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<fake_file_5>
+  <mst>0401985971</mst>
+  <company>CONG TY GIẢ SỐ 5</company>
+  <content>File XML giả cuối cùng - chứa ransomware</content>
+  <ransomware>Your files are encrypted. Send 1 BTC to unlock.</ransomware>
+  <encryption_key>DEADBEEF1234567890ABCDEF</encryption_key>
+  <timestamp>2025-08-28 14:58:00</timestamp>
+</fake_file_5>

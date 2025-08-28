@@ -1,0 +1,42 @@
+# PyInstaller
+dist/
+build/
+*.spec
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+temp/
+
+# Protected folders (local only)
+ORIGINAL_TEMPLATES_SAFE/
+PROTECTED_XML_FILES_SAFE/
+
+# Build artifacts
+*.exe
+*.msi
+*.dmg
