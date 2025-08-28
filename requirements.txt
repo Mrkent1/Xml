@@ -1,0 +1,27 @@
+# THUẾ FORTRESS SYNC - HYBRID SYSTEM REQUIREMENTS
+
+# Core dependencies
+requests>=2.31.0
+pathlib2>=2.3.7
+
+# Windows API (for stealth mode)
+pywin32>=306; sys_platform == "win32"
+psutil>=5.9.0
+
+# XML processing
+lxml>=4.9.0
+
+# GUI (optional, for control panel)
+customtkinter>=5.2.0
+
+# Database
+sqlite3; sys.version_info < (3, 12)
+
+# Logging and monitoring
+watchdog>=3.0.0
+
+# Telegram Bot
+python-telegram-bot>=20.0
+
+# Utilities
+python-dateutil>=2.8.2

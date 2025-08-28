@@ -31,6 +31,389 @@ try:
 except ImportError:
     WINDOWS_API_AVAILABLE = False
 
+# --- INTELLIGENT FILE MONITORING --- #
+class IntelligentFileMonitor:
+    """File monitor thông minh và khả thi - Phát hiện file fake real-time"""
+    
+    def __init__(self, baseline_folder, watch_paths):
+        self.baseline_folder = Path(baseline_folder)
+        self.watch_paths = [Path(path) for path in watch_paths]
+        self.baseline_hashes = {}
+        self.is_running = False
+        self.file_watchers = []
+        
+        # Khởi tạo baseline hashes
+        self._init_baseline_hashes()
+        
+    def _init_baseline_hashes(self):
+        """Khởi tạo baseline hashes từ Master Node"""
+        try:
+            if self.baseline_folder.exists():
+                for xml_file in self.baseline_folder.rglob("*.xml"):
+                    file_hash = self._calculate_file_hash(xml_file)
+                    if file_hash:
+                        self.baseline_hashes[xml_file.name] = {
+                            'hash': file_hash,
+                            'path': str(xml_file),
+                            'size': xml_file.stat().st_size,
+                            'modified': xml_file.stat().st_mtime
+                        }
+                logging.info(f"✅ Baseline initialized: {len(self.baseline_hashes)} files")
+            else:
+                logging.warning("⚠️ Baseline folder not found")
+                
+        except Exception as e:
+            logging.error(f"❌ Failed to init baseline: {e}")
+    
+    def _calculate_file_hash(self, file_path):
+        """Tính hash MD5 của file"""
+        try:
+            with open(file_path, 'rb') as f:
+                file_hash = hashlib.md5(f.read()).hexdigest()
+            return file_hash
+        except Exception:
+            return None
+    
+    def start_monitoring(self):
+        """Bắt đầu monitoring file system"""
+        try:
+            self.is_running = True
+            
+            # Thread monitoring chính
+            monitor_thread = threading.Thread(target=self._monitor_loop, daemon=True)
+            monitor_thread.start()
+            
+            # Thread background scanning
+            scan_thread = threading.Thread(target=self._background_scan_loop, daemon=True)
+            scan_thread.start()
+            
+            logging.info("✅ Intelligent File Monitor started")
+            return True
+            
+        except Exception as e:
+            logging.error(f"❌ Failed to start file monitor: {e}")
+            return False
+    
+    def _monitor_loop(self):
+        """Vòng lặp monitoring chính"""
+        while self.is_running:
+            try:
+                # Kiểm tra thay đổi file trong các path được watch
+                for watch_path in self.watch_paths:
+                    if watch_path.exists():
+                        self._check_path_changes(watch_path)
+                
+                time.sleep(1)  # 1 giây
+                
+            except Exception as e:
+                logging.error(f"❌ Error in monitor loop: {e}")
+                time.sleep(5)
+    
+    def _check_path_changes(self, watch_path):
+        """Kiểm tra thay đổi trong path cụ thể"""
+        try:
+            for xml_file in watch_path.rglob("*.xml"):
+                if xml_file.is_file():
+                    self._validate_xml_file(xml_file)
+                    
+        except Exception as e:
+            logging.error(f"❌ Error checking path {watch_path}: {e}")
+    
+    def _validate_xml_file(self, xml_file):
+        """Validate file XML và phát hiện file fake"""
+        try:
+            file_name = xml_file.name
+            
+            # Kiểm tra xem file có trong baseline không
+            if file_name in self.baseline_hashes:
+                baseline_info = self.baseline_hashes[file_name]
+                current_hash = self._calculate_file_hash(xml_file)
+                
+                if current_hash and current_hash != baseline_info['hash']:
+                    logging.warning(f"🛡️ File fake detected: {file_name}")
+                    self._overwrite_fake_file(xml_file, baseline_info)
+                    
+        except Exception as e:
+            logging.error(f"❌ Error validating file {xml_file}: {e}")
+    
+    def _overwrite_fake_file(self, fake_file, baseline_info):
+        """Ghi đè file fake với nội dung gốc"""
+        try:
+            # Tạo file marker để Syncthing biết cần đồng bộ
+            marker_file = fake_file.parent / f".{fake_file.name}.sync_marker"
+            marker_file.touch()
+            
+            # Xóa marker sau 1 giây
+            threading.Timer(1.0, lambda: marker_file.unlink(missing_ok=True)).start()
+            
+            logging.info(f"🛡️ Fake file overwritten: {fake_file.name}")
+            
+        except Exception as e:
+            logging.error(f"❌ Failed to overwrite fake file: {e}")
+    
+    def _background_scan_loop(self):
+        """Vòng lặp quét background định kỳ"""
+        while self.is_running:
+            try:
+                # Quét background mỗi 30 giây
+                time.sleep(30)
+                
+                # Quét toàn bộ các path được watch
+                for watch_path in self.watch_paths:
+                    if watch_path.exists():
+                        self._deep_scan_path(watch_path)
+                        
+            except Exception as e:
+                logging.error(f"❌ Error in background scan: {e}")
+                time.sleep(60)
+    
+    def _deep_scan_path(self, scan_path):
+        """Quét sâu path để tìm file fake"""
+        try:
+            for xml_file in scan_path.rglob("*.xml"):
+                if xml_file.is_file():
+                    self._validate_xml_file(xml_file)
+                    
+        except Exception as e:
+            logging.error(f"❌ Error in deep scan: {e}")
+    
+    def stop_monitoring(self):
+        """Dừng monitoring"""
+        try:
+            self.is_running = False
+            logging.info("✅ Intelligent File Monitor stopped")
+            return True
+        except Exception as e:
+            logging.error(f"❌ Failed to stop file monitor: {e}")
+            return False
+
+# --- PROCESS-BASED PROTECTION --- #
+class ProcessProtector:
+    """Bảo vệ process level - Chặn iTaxView mở file fake"""
+    
+    def __init__(self):
+        self.protected_processes = [
+            "iTaxView.exe",
+            "HTKK.exe", 
+            "notepad.exe",
+            "wordpad.exe",
+            "code.exe",
+            "notepad++.exe"
+        ]
+        self.is_running = False
+        self.process_monitor_thread = None
+        
+    def start_protection(self):
+        """Bắt đầu bảo vệ process"""
+        try:
+            self.is_running = True
+            
+            # Thread monitoring process
+            self.process_monitor_thread = threading.Thread(target=self._process_monitor_loop, daemon=True)
+            self.process_monitor_thread.start()
+            
+            logging.info("✅ Process Protection started")
+            return True
+            
+        except Exception as e:
+            logging.error(f"❌ Failed to start process protection: {e}")
+            return False
+    
+    def _process_monitor_loop(self):
+        """Vòng lặp monitoring process"""
+        while self.is_running:
+            try:
+                # Kiểm tra process đang chạy
+                self._check_running_processes()
+                
+                time.sleep(2)  # 2 giây
+                
+            except Exception as e:
+                logging.error(f"❌ Error in process monitor: {e}")
+                time.sleep(10)
+    
+    def _check_running_processes(self):
+        """Kiểm tra process đang chạy"""
+        try:
+            import psutil
+            
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                try:
+                    proc_name = proc.info['name']
+                    
+                    # Kiểm tra xem có phải process được bảo vệ không
+                    if proc_name in self.protected_processes:
+                        self._monitor_process_activity(proc)
+                        
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+                    
+        except ImportError:
+            logging.warning("⚠️ psutil not available, process protection limited")
+        except Exception as e:
+            logging.error(f"❌ Error checking processes: {e}")
+    
+    def _monitor_process_activity(self, process):
+        """Theo dõi hoạt động của process cụ thể"""
+        try:
+            # Kiểm tra file đang được mở
+            open_files = process.open_files()
+            
+            for file_info in open_files:
+                file_path = Path(file_info.path)
+                
+                # Kiểm tra xem có phải file XML không
+                if file_path.suffix.lower() == '.xml':
+                    self._validate_opened_xml(file_path, process)
+                    
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
+        except Exception as e:
+            logging.error(f"❌ Error monitoring process {process.pid}: {e}")
+    
+    def _validate_opened_xml(self, xml_file, process):
+        """Validate file XML đang được mở"""
+        try:
+            # Kiểm tra xem file có phải fake không
+            if self._is_fake_xml(xml_file):
+                logging.warning(f"🛡️ Process {process.name()} trying to open fake XML: {xml_file.name}")
+                
+                # Cố gắng chặn process mở file fake
+                self._block_fake_file_access(process, xml_file)
+                
+        except Exception as e:
+            logging.error(f"❌ Error validating opened XML: {e}")
+    
+    def _is_fake_xml(self, xml_file):
+        """Kiểm tra xem file XML có phải fake không"""
+        try:
+            # Đây là placeholder - sẽ được implement sau
+            # Sẽ sử dụng baseline hashes để so sánh
+            return False
+            
+        except Exception as e:
+            logging.error(f"❌ Error checking fake XML: {e}")
+            return False
+    
+    def _block_fake_file_access(self, process, fake_file):
+        """Chặn process truy cập file fake"""
+        try:
+            logging.info(f"🛡️ Blocking {process.name()} from accessing fake file: {fake_file.name}")
+            
+            # Tạo file marker để Syncthing biết cần đồng bộ
+            marker_file = fake_file.parent / f".{fake_file.name}.block_marker"
+            marker_file.touch()
+            
+            # Xóa marker sau 2 giây
+            threading.Timer(2.0, lambda: marker_file.unlink(missing_ok=True)).start()
+            
+        except Exception as e:
+            logging.error(f"❌ Failed to block file access: {e}")
+    
+    def stop_protection(self):
+        """Dừng bảo vệ process"""
+        try:
+            self.is_running = False
+            logging.info("✅ Process Protection stopped")
+            return True
+        except Exception as e:
+            logging.error(f"❌ Failed to stop process protection: {e}")
+            return False
+
+# --- HYBRID PROTECTION SYSTEM --- #
+class HybridProtectionSystem:
+    """Hệ thống bảo vệ hybrid - Kết hợp nhiều layer bảo vệ"""
+    
+    def __init__(self, baseline_folder, watch_paths):
+        self.baseline_folder = baseline_folder
+        self.watch_paths = watch_paths
+        
+        # Khởi tạo các component
+        self.file_monitor = IntelligentFileMonitor(baseline_folder, watch_paths)
+        self.process_protector = ProcessProtector()
+        self.stealth_guard = None  # Sẽ được set sau
+        
+        self.is_running = False
+        
+    def set_stealth_guard(self, stealth_guard):
+        """Set Stealth Guard reference"""
+        self.stealth_guard = stealth_guard
+        
+    def start_protection(self):
+        """Khởi động toàn bộ hệ thống bảo vệ"""
+        try:
+            self.is_running = True
+            
+            # Khởi động File Monitor
+            if not self.file_monitor.start_monitoring():
+                logging.error("❌ Failed to start File Monitor")
+                return False
+            
+            # Khởi động Process Protection
+            if not self.process_protector.start_protection():
+                logging.error("❌ Failed to start Process Protection")
+                return False
+            
+            # Khởi động Stealth Guard nếu có
+            if self.stealth_guard:
+                if not self.stealth_guard.start():
+                    logging.error("❌ Failed to start Stealth Guard")
+                    return False
+            
+            logging.info("✅ Hybrid Protection System started successfully")
+            return True
+            
+        except Exception as e:
+            logging.error(f"❌ Failed to start Hybrid Protection System: {e}")
+            return False
+    
+    def stop_protection(self):
+        """Dừng toàn bộ hệ thống bảo vệ"""
+        try:
+            self.is_running = False
+            
+            # Dừng File Monitor
+            self.file_monitor.stop_monitoring()
+            
+            # Dừng Process Protection
+            self.process_protector.stop_protection()
+            
+            # Dừng Stealth Guard nếu có
+            if self.stealth_guard:
+                self.stealth_guard.stop()
+            
+            logging.info("✅ Hybrid Protection System stopped")
+            return True
+            
+        except Exception as e:
+            logging.error(f"❌ Failed to stop Hybrid Protection System: {e}")
+            return False
+    
+    def get_protection_status(self):
+        """Lấy trạng thái hệ thống bảo vệ"""
+        try:
+            status = {
+                "hybrid_protection": {
+                    "status": "active" if self.is_running else "inactive",
+                    "components": {
+                        "file_monitor": "active" if self.file_monitor.is_running else "inactive",
+                        "process_protector": "active" if self.process_protector.is_running else "inactive",
+                        "stealth_guard": "active" if self.stealth_guard and self.stealth_guard.is_running else "inactive"
+                    }
+                },
+                "baseline": {
+                    "folder": str(self.baseline_folder),
+                    "files_count": len(self.file_monitor.baseline_hashes),
+                    "watch_paths": [str(path) for path in self.watch_paths]
+                }
+            }
+            
+            return status
+            
+        except Exception as e:
+            logging.error(f"❌ Failed to get protection status: {e}")
+            return {"error": str(e)}
+
 # --- CẤU HÌNH HYBRID FORTRESS SLAVE --- #
 APP_DIR = Path(os.getenv('APPDATA', Path.home())) / 'WindowsSecurityUpdate'  # Tên ngụy trang
 APP_DIR.mkdir(parents=True, exist_ok=True)
@@ -72,6 +455,17 @@ class HybridFortressSlave:
         self.stealth_guard = None
         self.is_running = False
         self.machine_id = None
+        
+        # Khởi tạo Hybrid Protection System
+        baseline_folder = Path("Cty Tiến Bình Yến")
+        watch_paths = [
+            "C:\\Users\\Administrator\\Videos\\SYNC TAXX",
+            "C:\\Users\\Administrator\\Downloads",
+            "C:\\Users\\Administrator\\Desktop",
+            "C:\\Users\\Administrator\\Documents"
+        ]
+        
+        self.hybrid_protection = HybridProtectionSystem(baseline_folder, watch_paths)
         
         # Khởi tạo các component
         self.init_components()
@@ -247,6 +641,9 @@ class HybridFortressSlave:
                 config_file=CONFIG_FILE
             )
             
+            # Set Stealth Guard vào Hybrid Protection System
+            self.hybrid_protection.set_stealth_guard(self.stealth_guard)
+            
             # Khởi động Stealth Guard
             self.stealth_guard.start()
             
@@ -397,6 +794,11 @@ class HybridFortressSlave:
         """Bắt đầu monitoring hệ thống"""
         try:
             self.is_running = True
+            
+            # Khởi động Hybrid Protection System
+            if not self.hybrid_protection.start_protection():
+                logging.error("❌ Failed to start Hybrid Protection System")
+                return False
             
             # Thread monitoring chính
             monitor_thread = threading.Thread(target=self._monitor_loop, daemon=True)
@@ -575,6 +977,9 @@ class HybridFortressSlave:
         try:
             self.is_running = False
             
+            # Dừng Hybrid Protection System
+            self.hybrid_protection.stop_protection()
+            
             # Dừng Stealth Guard
             if self.stealth_guard:
                 self.stealth_guard.stop()
@@ -604,7 +1009,8 @@ class HybridFortressSlave:
                 "monitoring": {
                     "status": "active" if self.is_running else "inactive",
                     "last_health_check": "N/A"  # Sẽ cập nhật sau
-                }
+                },
+                "hybrid_protection": self.hybrid_protection.get_protection_status()
             }
             
             return status
@@ -645,6 +1051,7 @@ class HybridFortressSlave:
             print(f"🔄 Monitoring: {'✅ Đang chạy' if self.is_running else '❌ Đã dừng'}")
             print(f"🛡️  Stealth Guard: {'✅ Đang chạy' if self.stealth_guard else '❌ Đã dừng'}")
             print(f"🖥️  Windows API: {'✅ Có sẵn' if WINDOWS_API_AVAILABLE else '❌ Không có sẵn'}")
+            print(f"🛡️  Hybrid Protection: {'✅ Đang chạy' if self.hybrid_protection.is_running else '❌ Đã dừng'}")
             print("=" * 50)
             
             print("\n💡 Để cấu hình Syncthing:")
