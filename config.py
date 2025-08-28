@@ -6,10 +6,10 @@ Thay đổi các thông tin dưới đây theo nhu cầu của bạn
 
 # ===== CẤU HÌNH TELEGRAM BOT =====
 # Token bot Telegram (lấy từ @BotFather)
-TELEGRAM_TOKEN = "YOUR_BOT_TOKEN"
+TELEGRAM_TOKEN = "7283723256:AAEqXPiQ-s2sYI8vyhfUyrcq8uL-pRG_UZI"
 
 # ID nhóm Telegram (lấy từ @userinfobot)
-TELEGRAM_GROUP_ID = "YOUR_GROUP_ID"
+TELEGRAM_GROUP_ID = "-1002980917638"
 
 # ===== CẤU HÌNH GITHUB =====
 # Repository GitHub (format: username/repository)

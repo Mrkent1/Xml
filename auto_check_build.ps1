@@ -1,34 +1,34 @@
-# PowerShell Script tự động kiểm tra GitHub Actions Build Status
-# Chạy script này để theo dõi build và gửi thông báo Telegram
+# PowerShell Script tu dong kiem tra GitHub Actions Build Status
+# Chay script nay de theo doi build va gui thong bao Telegram
 
-Write-Host "🚀 Script tự động kiểm tra GitHub Actions Build Status" -ForegroundColor Green
-Write-Host "=" * 50 -ForegroundColor Cyan
+Write-Host "Script tu dong kiem tra GitHub Actions Build Status" -ForegroundColor Green
+Write-Host "==================================================" -ForegroundColor Cyan
 
-# Kiểm tra Python
+# Kiem tra Python
 try {
     $pythonVersion = python --version 2>&1
-    Write-Host "✅ Python: $pythonVersion" -ForegroundColor Green
+    Write-Host "Python: $pythonVersion" -ForegroundColor Green
 } catch {
-    Write-Host "❌ Python không được cài đặt!" -ForegroundColor Red
-    Write-Host "Vui lòng cài đặt Python trước khi chạy script này." -ForegroundColor Yellow
+    Write-Host "Python khong duoc cai dat!" -ForegroundColor Red
+    Write-Host "Vui long cai dat Python truoc khi chay script nay." -ForegroundColor Yellow
     exit 1
 }
 
-# Kiểm tra dependencies
-Write-Host "📦 Kiểm tra dependencies..." -ForegroundColor Yellow
+# Kiem tra dependencies
+Write-Host "Kiem tra dependencies..." -ForegroundColor Yellow
 try {
-    python -c "import requests; print('✅ requests')"
+    python -c "import requests; print('requests OK')"
 } catch {
-    Write-Host "❌ requests chưa được cài đặt. Đang cài đặt..." -ForegroundColor Red
+    Write-Host "requests chua duoc cai dat. Dang cai dat..." -ForegroundColor Red
     pip install requests
 }
 
-# Chạy script Python
-Write-Host "🔍 Bắt đầu kiểm tra build status..." -ForegroundColor Cyan
+# Chay script Python
+Write-Host "Bat dau kiem tra build status..." -ForegroundColor Cyan
 python check_build_status.py
 
-Write-Host "✅ Hoàn tất kiểm tra build status!" -ForegroundColor Green
-Write-Host "📱 Kiểm tra nhóm Telegram để xem thông báo!" -ForegroundColor Yellow
+Write-Host "Hoan tat kiem tra build status!" -ForegroundColor Green
+Write-Host "Kiem tra nhom Telegram de xem thong bao!" -ForegroundColor Yellow
 
-# Tạm dừng để xem kết quả
-Read-Host "Nhấn Enter để thoát..."
+# Tam dung de xem ket qua
+Read-Host "Nhan Enter de thoat..."

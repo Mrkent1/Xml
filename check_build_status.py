@@ -11,13 +11,19 @@ import json
 import os
 from datetime import datetime
 
-# Cấu hình Telegram Bot
-TELEGRAM_TOKEN = "YOUR_BOT_TOKEN"  # Thay bằng token thật
-TELEGRAM_GROUP_ID = "YOUR_GROUP_ID"  # Thay bằng ID nhóm thật
-
-# Cấu hình GitHub
-GITHUB_REPO = "Mrkent1/Xml"
-GITHUB_TOKEN = "YOUR_GITHUB_TOKEN"  # Thay bằng GitHub token thật
+# Import config từ file config.py
+try:
+    from config import (
+        TELEGRAM_TOKEN, 
+        TELEGRAM_GROUP_ID, 
+        GITHUB_REPO, 
+        GITHUB_TOKEN,
+        CHECK_INTERVAL,
+        MAX_CHECKS
+    )
+except ImportError:
+    print("❌ Không thể import config.py. Vui lòng kiểm tra file config!")
+    exit(1)
 
 def send_telegram_message(message):
     """Gửi tin nhắn đến nhóm Telegram"""
