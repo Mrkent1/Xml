@@ -1,0 +1,25 @@
+{
+  "id": "tax_xml_master",
+  "label": "THUẾ FORTRESS SYNC - XML Master",
+  "path": "C:\\Users\\Administrator\\Videos\\SYNC TAXX",
+  "type": "sendreceive",
+  "rescanIntervalS": 10,
+  "fsWatcherEnabled": true,
+  "fsWatcherDelayS": 10,
+  "ignorePerms": false,
+  "autoNormalize": true,
+  "devices": [
+    {
+      "deviceID": "32T3YKD-M5R6PH4-WKMPECC-5T7NQN2-3SGQD6L-QM6XD4L-SYZU3BU-MBARCQM",
+      "introducedBy": "",
+      "encryptionPassword": ""
+    }
+  ],
+  "versioning": {
+    "type": "none"
+  },
+  "minDiskFree": {
+    "path": "",
+    "value": 1
+  }
+}

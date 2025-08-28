@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "root": "C:\\Users\\Administrator\\Videos\\SYNC TAXX",
+  "companies": [
+    "cty Bình Nguyễn Derco",
+    "Cty Tiến Bình Yến"
+  ],
+  "fields": {
+    "core": [
+      "mst",
+      "pbanDVu",
+      "pbanTKhaiXML",
+      "ngayLapTKhai",
+      "kyKKhai",
+      "kieuKy",
+      "maTKhai",
+      "tenCQTNoiNop",
+      "ds_DigestValue",
+      "ds_X509SubjectName"
+    ],
+    "optional": [
+      "HSoKhaiThue_id"
+    ]
+  },
+  "policy": {
+    "minCoreMatch": "all",
+    "dryRun": true,
+    "enforceOnFake": true,
+    "matchFields": [
+      "mst",
+      "maTKhai",
+      "kieuKy",
+      "kyKKhai",
+      "pbanTKhaiXML"
+    ],
+    "syncthing": {
+      "baseUrl": "http://127.0.0.1:8384",
+      "apiKey": "",
+      "folderId": "tax_xml_master",
+      "folderRoot": "C:\\Users\\Administrator\\Videos\\SYNC TAXX",
+      "revertAll": false
+    }
+  },
+  "hybrid_fortress": {
+    "master": {
+      "enabled": true,
+      "telegram_bot": true,
+      "monitoring_interval": 5,
+      "health_check_interval": 300
+    },
+    "slave": {
+      "enabled": true,
+      "stealth_mode": true,
+      "auto_overwrite": true,
+      "monitoring_interval": 3
+    }
+  }
+}
