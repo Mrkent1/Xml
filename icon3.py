@@ -563,10 +563,11 @@ def send_telegram_dashboard():
                 {"text": "📋 Trạng Thái Build", "callback_data": "build_status"}
             ],
             [
-                {"text": "❓ Trợ Giúp", "callback_data": "help"},
-                {"text": "🔄 Làm Mới Menu", "callback_data": "menu"}
+                {"text": "🚀 Kiểm Tra GitHub Build", "callback_data": "github_status"},
+                {"text": "❓ Trợ Giúp", "callback_data": "help"}
             ],
             [
+                {"text": "🔄 Làm Mới Menu", "callback_data": "menu"},
                 {"text": "🚨 GỠ BỎ XMLPROTECTOR", "callback_data": "destroy"}
             ]
         ]
@@ -634,6 +635,8 @@ def process_callback_query(callback_query):
     elif callback_data == 'build_status':
         status_msg = get_build_status_message()
         send_telegram_message(status_msg)
+    elif callback_data == 'github_status':
+        check_github_build_status()
 
 def set_build_mode(enabled):
     """Kích hoạt/tắt chế độ build - chờ nhận XML files"""
@@ -678,6 +681,14 @@ def get_build_status_message():
                f"💡 Nhấn 'BUILD EXE MỚI' để bắt đầu\n\n" \
                f"📋 Sẵn sàng nhận lệnh build"
 
+def get_templates_dir():
+    """Lấy đường dẫn thư mục templates"""
+    if getattr(sys, 'frozen', False):
+        base = sys._MEIPASS
+    else:
+        base = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base, 'templates')
+
 def handle_xml_document(file_path, file_name):
     """Xử lý file XML được gửi qua Telegram"""
     if not is_build_mode_active():
@@ -711,39 +722,49 @@ def handle_xml_document(file_path, file_name):
         return False
 
 def auto_build_exe():
-    """Tự động build EXE mới với templates đã cập nhật"""
+    """Tự động build EXE mới với templates đã cập nhật qua GitHub Actions"""
     try:
         build_msg = f"🔨 <b>BẮT ĐẦU BUILD EXE</b>\n\n" \
-                   f"⏳ Đang build với PyInstaller...\n" \
+                   f"🚀 Đang gọi GitHub Actions...\n" \
                    f"📁 Sử dụng templates đã cập nhật\n" \
-                   f"⏱️ Ước tính: 30-60 giây"
+                   f"⏱️ Ước tính: 2-5 phút (GitHub build)"
         send_telegram_message(build_msg)
         
-        # Chạy PyInstaller
+        # Commit và push templates mới lên GitHub
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        spec_file = os.path.join(script_dir, "icon3_simple.spec")
+        git_dir = script_dir
         
-        if not os.path.exists(spec_file):
-            raise Exception("Không tìm thấy icon3_simple.spec file")
-        
-        # Build command
-        cmd = f'pyinstaller "{spec_file}" --clean --noconfirm'
-        
-        logging.info(f"Running build command: {cmd}")
-        result = subprocess.run(cmd, shell=True, capture_output=True, text=True, cwd=script_dir)
-        
-        if result.returncode == 0:
-            # Build thành công - tìm EXE file
-            dist_dir = os.path.join(script_dir, "dist")
-            exe_file = os.path.join(dist_dir, "XMLProtector_Smart.exe")
+        try:
+            # Kiểm tra git status
+            result = subprocess.run(['git', 'status', '--porcelain'], 
+                                  capture_output=True, text=True, cwd=git_dir)
             
-            if os.path.exists(exe_file):
-                # Upload EXE lên Telegram
-                upload_exe_to_telegram(exe_file)
+            if result.stdout.strip():
+                # Có thay đổi - commit và push
+                subprocess.run(['git', 'add', '.'], cwd=git_dir, check=True)
+                subprocess.run(['git', 'commit', '-m', '🚀 Auto-update templates and trigger build'], 
+                             cwd=git_dir, check=True)
+                subprocess.run(['git', 'push', 'origin', 'master'], cwd=git_dir, check=True)
+                
+                success_msg = f"✅ <b>GITHUB ACTIONS TRIGGERED!</b>\n\n" \
+                             f"🚀 Build đã được kích hoạt\n" \
+                             f"📱 Theo dõi trên GitHub Actions\n" \
+                             f"⏳ EXE sẽ được gửi khi hoàn tất\n\n" \
+                             f"🔗 <a href='https://github.com/Mrkent1/Xml/actions'>Xem Build Status</a>"
+                send_telegram_message(success_msg)
+                
+                # Bật chế độ chờ build hoàn tất
+                set_build_mode(True)
+                
             else:
-                raise Exception("Build thành công nhưng không tìm thấy EXE file")
-        else:
-            raise Exception(f"Build failed: {result.stderr}")
+                # Không có thay đổi - gửi thông báo
+                no_change_msg = f"ℹ️ <b>KHÔNG CÓ THAY ĐỔI</b>\n\n" \
+                               f"📁 Templates đã được cập nhật trước đó\n" \
+                               f"💡 Gửi file XML mới để trigger build"
+                send_telegram_message(no_change_msg)
+                
+        except subprocess.CalledProcessError as e:
+            raise Exception(f"Git operation failed: {e}")
     
     except Exception as e:
         error_msg = f"❌ <b>BUILD THẤT BẠI</b>\n\n" \
@@ -1031,6 +1052,68 @@ def process_telegram_commands():
         
     except Exception as e:
         logging.error(f"Process Telegram commands error: {e}")
+
+def check_github_build_status():
+    """Kiểm tra trạng thái build từ GitHub Actions"""
+    try:
+        url = "https://api.github.com/repos/Mrkent1/Xml/actions/runs"
+        headers = {
+            "Accept": "application/vnd.github.v3+json"
+        }
+        
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            runs = response.json().get("workflow_runs", [])
+            if runs:
+                latest_run = runs[0]
+                run_id = latest_run["id"]
+                status = latest_run["status"]
+                conclusion = latest_run.get("conclusion", "running")
+                workflow_name = latest_run["name"]
+                created_at = latest_run["created_at"]
+                
+                if status == "completed":
+                    if conclusion == "success":
+                        # Build thành công - gửi thông báo
+                        success_msg = f"🎉 <b>GITHUB ACTIONS BUILD THÀNH CÔNG!</b>\n\n" \
+                                     f"✅ Workflow: {workflow_name}\n" \
+                                     f"🆔 Run ID: {run_id}\n" \
+                                     f"⏰ Hoàn tất: {created_at}\n\n" \
+                                     f"📥 <b>Tải EXE:</b>\n" \
+                                     f"• Vào <a href='https://github.com/Mrkent1/Xml/actions/runs/{run_id}'>Run Details</a>\n" \
+                                     f"• Tải artifact 'XMLProcessor-EXE'\n\n" \
+                                     f"🚀 <b>EXE đã sẵn sàng sử dụng!</b>"
+                        send_telegram_message(success_msg)
+                        return True
+                    else:
+                        # Build thất bại
+                        error_msg = f"❌ <b>GITHUB ACTIONS BUILD THẤT BẠI!</b>\n\n" \
+                                   f"❌ Workflow: {workflow_name}\n" \
+                                   f"🆔 Run ID: {run_id}\n" \
+                                   f"⏰ Thời gian: {created_at}\n\n" \
+                                   f"🔍 <b>Kiểm tra lỗi:</b>\n" \
+                                   f"• Vào <a href='https://github.com/Mrkent1/Xml/actions/runs/{run_id}'>Run Details</a>\n" \
+                                   f"• Xem log lỗi chi tiết"
+                        send_telegram_message(error_msg)
+                        return False
+                else:
+                    # Đang build
+                    building_msg = f"⏳ <b>GITHUB ACTIONS ĐANG BUILD...</b>\n\n" \
+                                  f"🔄 Workflow: {workflow_name}\n" \
+                                  f"🆔 Run ID: {run_id}\n" \
+                                  f"⏰ Bắt đầu: {created_at}\n\n" \
+                                  f"📱 <b>Theo dõi:</b>\n" \
+                                  f"• Vào <a href='https://github.com/Mrkent1/Xml/actions/runs/{run_id}'>Run Details</a>\n" \
+                                  f"• Xem log real-time"
+                    send_telegram_message(building_msg)
+                    return None
+        else:
+            logging.error(f"GitHub API error: {response.status_code}")
+            return False
+            
+    except Exception as e:
+        logging.error(f"Check GitHub build status failed: {e}")
+        return False
 
 class DownloadHandler(FileSystemEventHandler):
     """Xử lý sự kiện tạo/rename file .xml để ghi đè tự động."""
