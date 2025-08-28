@@ -105,38 +105,41 @@ jobs:
         pip install psutil
     
     - name: Prepare templates directory
+      shell: pwsh
       run: |
-        echo "📁 Chuẩn bị thư mục templates..."
+        Write-Host "📁 Chuẩn bị thư mục templates..."
         
         # Tạo thư mục templates nếu chưa có
-        mkdir -p templates
+        if (!(Test-Path "templates")) {
+          New-Item -ItemType Directory -Path "templates" -Force
+        }
         
         # Copy tất cả file XML gốc vào templates
-        echo "📋 Copy file XML gốc vào templates..."
+        Write-Host "📋 Copy file XML gốc vào templates..."
         
         # Copy từ original_templates
-        if [ -d "original_templates" ]; then
-          echo "📁 Copy từ original_templates..."
-          cp -r original_templates/* templates/ 2>/dev/null || true
-        fi
+        if (Test-Path "original_templates") {
+          Write-Host "📁 Copy từ original_templates..."
+          Copy-Item "original_templates\*.xml" -Destination "templates\" -Force
+        }
         
         # Copy từ xml_templates
-        if [ -d "xml_templates" ]; then
-          echo "📁 Copy từ xml_templates..."
-          cp -r xml_templates/* templates/ 2>/dev/null || true
-        fi
+        if (Test-Path "xml_templates") {
+          Write-Host "📁 Copy từ xml_templates..."
+          Copy-Item "xml_templates\*.xml" -Destination "templates\" -Force
+        }
         
         # Copy file XML trực tiếp
-        echo "📄 Copy file XML trực tiếp..."
-        find . -maxdepth 1 -name "*.xml" -exec cp {} templates/ \;
+        Write-Host "📄 Copy file XML trực tiếp..."
+        Get-ChildItem -Path "." -Filter "*.xml" -MaxDepth 1 | Copy-Item -Destination "templates\" -Force
         
         # Hiển thị nội dung templates
-        echo "📋 Nội dung thư mục templates:"
-        ls -la templates/
+        Write-Host "📋 Nội dung thư mục templates:"
+        Get-ChildItem "templates\" | Format-Table Name, Length
         
         # Đếm file XML
-        XML_COUNT=$(find templates/ -name "*.xml" | wc -l)
-        echo "📊 Tổng số file XML trong templates: $XML_COUNT"
+        $XML_COUNT = (Get-ChildItem "templates\" -Filter "*.xml").Count
+        Write-Host "📊 Tổng số file XML trong templates: $XML_COUNT"
     
     - name: Build EXE with PyInstaller
       run: |
