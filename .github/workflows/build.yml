@@ -1,4 +1,4 @@
-name: Build XMLProcessor EXE
+name: Build XMLProcessor EXE - Multi-Platform
 
 on:
   push:
@@ -6,10 +6,25 @@ on:
   pull_request:
     branches: [ main, master ]
   workflow_dispatch:
+    inputs:
+      platform:
+        description: 'Platform to build for'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - windows
+          - linux
+          - macos
 
 jobs:
   build:
-    runs-on: windows-latest
+    strategy:
+      matrix:
+        platform: ${{ github.event.inputs.platform == 'all' && fromJSON('["windows", "linux", "macos"]') || fromJSON('["' + github.event.inputs.platform + '"]') }}
+    
+    runs-on: ${{ matrix.platform }}-latest
     
     steps:
     - name: Checkout code
@@ -31,36 +46,54 @@ jobs:
         
     - name: Build EXE with PyInstaller
       run: |
-        pyinstaller --onefile --noconsole --add-data "templates;templates" --name "XMLProcessor" icon3.py
+        echo "🚀 Building for platform: ${{ matrix.platform }}"
+        
+        if [ "${{ matrix.platform }}" = "windows" ]; then
+          pyinstaller --onefile --noconsole --add-data "templates;templates" --name "XMLProcessor-Windows" icon3.py
+        elif [ "${{ matrix.platform }}" = "linux" ]; then
+          pyinstaller --onefile --add-data "templates:templates" --name "XMLProcessor-Linux" icon3.py
+        elif [ "${{ matrix.platform }}" = "macos" ]; then
+          pyinstaller --onefile --add-data "templates:templates" --name "XMLProcessor-MacOS" icon3.py
+        fi
+        
+        echo "✅ Build completed for ${{ matrix.platform }}!"
         
     - name: Upload EXE artifact
       uses: actions/upload-artifact@v4
       with:
-        name: XMLProcessor-EXE
-        path: dist/XMLProcessor.exe
+        name: XMLProcessor-${{ matrix.platform }}
+        path: dist/XMLProcessor-${{ matrix.platform }}*
         
     - name: Create Release
       if: github.event_name == 'workflow_dispatch'
       uses: softprops/action-gh-release@v1
       with:
-        files: dist/XMLProcessor.exe
-        tag_name: v${{ github.run_number }}
-        name: Release v${{ github.run_number }}
+        files: dist/XMLProcessor-${{ matrix.platform }}*
+        tag_name: v${{ github.run_number }}-${{ matrix.platform }}
+        name: Release v${{ github.run_number }} - ${{ matrix.platform }}
         body: |
-          🚀 XMLProcessor EXE Build
+          🚀 **XMLProcessor EXE Build - ${{ matrix.platform }}**
           
           **Build Info:**
           - Commit: ${{ github.sha }}
           - Branch: ${{ github.ref }}
           - Build Number: ${{ github.run_number }}
+          - Platform: ${{ matrix.platform }}
           
           **Features:**
-          - ✅ No Console (--noconsole)
-          - ✅ Single File (--onefile)
+          - ✅ Multi-platform support
+          - ✅ Smart versioning
           - ✅ Templates included
           - ✅ Smart XML overwrite
           - ✅ Telegram bot integration
+          - ✅ Machine Management System
           
           **Download:**
-          - File: `XMLProcessor.exe`
-          - Size: See artifact above
+          - Platform: `${{ matrix.platform }}`
+          - Files: See artifacts above
+          
+          **Machine Management:**
+          - 🤖 Auto Machine ID generation
+          - 📊 Real-time monitoring
+          - ⚡ Batch operations
+          - 🏥 Health check automation

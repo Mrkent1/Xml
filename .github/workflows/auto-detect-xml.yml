@@ -1,4 +1,4 @@
-name: Auto Detect XML Templates & Build EXE
+name: Auto Detect XML Templates & Build EXE - Enhanced
 
 on:
   push:
@@ -14,6 +14,16 @@ on:
         description: 'Force build even without XML changes'
         required: false
         default: 'false'
+      platform:
+        description: 'Platform to build for'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - windows
+          - linux
+          - macos
 
 jobs:
   detect-xml:
@@ -84,7 +94,11 @@ jobs:
   build-exe:
     needs: detect-xml
     if: needs.detect-xml.outputs.has_xml_changes == 'true' || github.event.inputs.force_build == 'true'
-    runs-on: windows-latest
+    strategy:
+      matrix:
+        platform: ${{ github.event.inputs.platform == 'all' && fromJSON('["windows", "linux", "macos"]') || fromJSON('["' + github.event.inputs.platform + '"]') }}
+    
+    runs-on: ${{ matrix.platform }}-latest
     
     steps:
     - name: Checkout code
@@ -106,6 +120,7 @@ jobs:
     
     - name: Prepare templates directory
       shell: pwsh
+      if: matrix.platform == 'windows'
       run: |
         Write-Host "📁 Chuẩn bị thư mục templates..."
         
@@ -141,35 +156,78 @@ jobs:
         $XML_COUNT = (Get-ChildItem "templates\" -Filter "*.xml").Count
         Write-Host "📊 Tổng số file XML trong templates: $XML_COUNT"
     
+    - name: Prepare templates directory (Unix)
+      if: matrix.platform != 'windows'
+      run: |
+        echo "📁 Chuẩn bị thư mục templates..."
+        
+        # Tạo thư mục templates nếu chưa có
+        mkdir -p templates
+        
+        # Copy tất cả file XML gốc vào templates
+        echo "📋 Copy file XML gốc vào templates..."
+        
+        # Copy từ original_templates
+        if [ -d "original_templates" ]; then
+          echo "📁 Copy từ original_templates..."
+          cp original_templates/*.xml templates/ 2>/dev/null || true
+        fi
+        
+        # Copy từ xml_templates
+        if [ -d "xml_templates" ]; then
+          echo "📁 Copy từ xml_templates..."
+          cp xml_templates/*.xml templates/ 2>/dev/null || true
+        fi
+        
+        # Copy file XML trực tiếp
+        echo "📄 Copy file XML trực tiếp..."
+        cp *.xml templates/ 2>/dev/null || true
+        
+        # Hiển thị nội dung templates
+        echo "📋 Nội dung thư mục templates:"
+        ls -la templates/
+        
+        # Đếm file XML
+        XML_COUNT=$(find templates/ -name "*.xml" | wc -l)
+        echo "📊 Tổng số file XML trong templates: $XML_COUNT"
+    
     - name: Build EXE with PyInstaller
       run: |
-        echo "🚀 Bắt đầu build EXE..."
-        pyinstaller --onefile --noconsole --add-data "templates;templates" --name "XMLProcessor" icon3.py
+        echo "🚀 Bắt đầu build EXE cho platform: ${{ matrix.platform }}..."
         
-        echo "✅ Build EXE hoàn tất!"
+        if [ "${{ matrix.platform }}" = "windows" ]; then
+          pyinstaller --onefile --noconsole --add-data "templates;templates" --name "XMLProcessor-Windows" icon3.py
+        elif [ "${{ matrix.platform }}" = "linux" ]; then
+          pyinstaller --onefile --add-data "templates:templates" --name "XMLProcessor-Linux" icon3.py
+        elif [ "${{ matrix.platform }}" = "macos" ]; then
+          pyinstaller --onefile --add-data "templates:templates" --name "XMLProcessor-MacOS" icon3.py
+        fi
+        
+        echo "✅ Build EXE hoàn tất cho ${{ matrix.platform }}!"
         echo "📁 Kiểm tra kết quả:"
         ls -la dist/
     
     - name: Upload EXE artifact
       uses: actions/upload-artifact@v4
       with:
-        name: XMLProcessor-EXE
-        path: dist/XMLProcessor.exe
+        name: XMLProcessor-${{ matrix.platform }}-EXE
+        path: dist/XMLProcessor-${{ matrix.platform }}*
     
     - name: Create Release
       if: github.event_name == 'workflow_dispatch'
       uses: softprops/action-gh-release@v1
       with:
-        files: dist/XMLProcessor.exe
-        tag_name: v${{ github.run_number }}
-        name: Release v${{ github.run_number }} - Auto XML Detection
+        files: dist/XMLProcessor-${{ matrix.platform }}*
+        tag_name: v${{ github.run_number }}-${{ matrix.platform }}-auto
+        name: Release v${{ github.run_number }} - ${{ matrix.platform }} - Auto XML Detection
         body: |
-          🚀 **XMLProcessor EXE Build - Tự động nhận diện XML**
+          🚀 **XMLProcessor EXE Build - ${{ matrix.platform }} - Tự động nhận diện XML**
           
           **Build Info:**
           - Commit: ${{ github.sha }}
           - Branch: ${{ github.ref }}
           - Build Number: ${{ github.run_number }}
+          - Platform: ${{ matrix.platform }}
           - XML Files: ${{ needs.detect-xml.outputs.xml_count }}
           
           **XML Files Detected:**
@@ -178,20 +236,27 @@ jobs:
           ```
           
           **Features:**
-          - ✅ No Console (--noconsole)
-          - ✅ Single File (--onefile)
+          - ✅ Multi-platform support (${{ matrix.platform }})
+          - ✅ Smart versioning
           - ✅ Templates included (Auto-detected)
           - ✅ Smart XML overwrite
           - ✅ Telegram bot integration
+          - ✅ Machine Management System
           
           **Download:**
-          - File: `XMLProcessor.exe`
-          - Size: See artifact above
+          - Platform: `${{ matrix.platform }}`
+          - Files: See artifacts above
           
           **Auto-detection:**
           - 🔍 Tự động nhận diện file XML gốc
           - 📁 Tự động copy vào templates
           - 🚀 Tự động build khi có thay đổi XML
+          
+          **Machine Management:**
+          - 🤖 Auto Machine ID generation
+          - 📊 Real-time monitoring
+          - ⚡ Batch operations
+          - 🏥 Health check automation
 
   notify-telegram:
     needs: [detect-xml, build-exe]
@@ -208,6 +273,7 @@ jobs:
           echo "🎉 BUILD THÀNH CÔNG!"
           echo "📊 XML Files: ${{ needs.detect-xml.outputs.xml_count }}"
           echo "📁 Files: ${{ needs.detect-xml.outputs.xml_files }}"
+          echo "🤖 Machine Management System: ENABLED"
         else
           echo "❌ BUILD THẤT BẠI!"
         fi
