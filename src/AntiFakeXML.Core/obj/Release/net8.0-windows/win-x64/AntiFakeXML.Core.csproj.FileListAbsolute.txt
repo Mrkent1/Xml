@@ -1,0 +1,11 @@
+C:\Users\Administrator\Pictures\AntiFakeXML_P1_Project\AntiFakeXML_P1\src\AntiFakeXML.Core\bin\Release\net8.0-windows\win-x64\AntiFakeXML.Core.deps.json
+C:\Users\Administrator\Pictures\AntiFakeXML_P1_Project\AntiFakeXML_P1\src\AntiFakeXML.Core\bin\Release\net8.0-windows\win-x64\AntiFakeXML.Core.dll
+C:\Users\Administrator\Pictures\AntiFakeXML_P1_Project\AntiFakeXML_P1\src\AntiFakeXML.Core\bin\Release\net8.0-windows\win-x64\AntiFakeXML.Core.pdb
+C:\Users\Administrator\Pictures\AntiFakeXML_P1_Project\AntiFakeXML_P1\src\AntiFakeXML.Core\obj\Release\net8.0-windows\win-x64\AntiFakeXML.Core.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\Administrator\Pictures\AntiFakeXML_P1_Project\AntiFakeXML_P1\src\AntiFakeXML.Core\obj\Release\net8.0-windows\win-x64\AntiFakeXML.Core.AssemblyInfoInputs.cache
+C:\Users\Administrator\Pictures\AntiFakeXML_P1_Project\AntiFakeXML_P1\src\AntiFakeXML.Core\obj\Release\net8.0-windows\win-x64\AntiFakeXML.Core.AssemblyInfo.cs
+C:\Users\Administrator\Pictures\AntiFakeXML_P1_Project\AntiFakeXML_P1\src\AntiFakeXML.Core\obj\Release\net8.0-windows\win-x64\AntiFakeXML.Core.csproj.CoreCompileInputs.cache
+C:\Users\Administrator\Pictures\AntiFakeXML_P1_Project\AntiFakeXML_P1\src\AntiFakeXML.Core\obj\Release\net8.0-windows\win-x64\AntiFakeXML.Core.dll
+C:\Users\Administrator\Pictures\AntiFakeXML_P1_Project\AntiFakeXML_P1\src\AntiFakeXML.Core\obj\Release\net8.0-windows\win-x64\refint\AntiFakeXML.Core.dll
+C:\Users\Administrator\Pictures\AntiFakeXML_P1_Project\AntiFakeXML_P1\src\AntiFakeXML.Core\obj\Release\net8.0-windows\win-x64\AntiFakeXML.Core.pdb
+C:\Users\Administrator\Pictures\AntiFakeXML_P1_Project\AntiFakeXML_P1\src\AntiFakeXML.Core\obj\Release\net8.0-windows\win-x64\ref\AntiFakeXML.Core.dll

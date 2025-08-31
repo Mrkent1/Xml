@@ -1,0 +1,3 @@
+C:\Users\Administrator\Pictures\AntiFakeXML_P1_Project\AntiFakeXML_P1\publish\XmlProxy.pdb
+C:\Users\Administrator\Pictures\AntiFakeXML_P1_Project\AntiFakeXML_P1\publish\AntiFakeXML.Core.pdb
+C:\Users\Administrator\Pictures\AntiFakeXML_P1_Project\AntiFakeXML_P1\publish\XmlProxy.exe

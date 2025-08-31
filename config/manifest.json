@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "issued_at": "2025-08-31T00:00:00Z",
+  "entries": [
+    {
+      "mst": "0123456789",
+      "maToKhai": "842",
+      "ky": "03/2024",
+      "soLan": 0,
+      "sha256": "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF",
+      "relative_path": "A/0123456789/842/2024-03/lan0.xml"
+    }
+  ]
+}
