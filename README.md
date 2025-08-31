@@ -128,6 +128,72 @@ C:\AntiFakeXML\
 3. **Test End Task** để kiểm tra watchdog hoạt động
 4. **Đóng gói MSI** cho triển khai 30 máy
 
+## 🧪 **Kịch bản test & Tiêu chí nghiệm thu hệ thống**
+
+### 1. **Đồng bộ & bảo vệ kho (Syncthing)**
+
+**TC1: Máy người dùng cài bản build sẵn, tự động khởi chạy Syncthing**
+- ✅ Tiêu chí: Không cần thao tác cấu hình thủ công, kết nối ngay kho chứa gốc
+
+**TC2: Tắt Syncthing trên máy người dùng**
+- ✅ Tiêu chí: BotGuard tự động khởi động lại Syncthing ≤10s
+
+**TC3: Máy client copy thêm file lạ (không có 4 trường định danh)**
+- ✅ Tiêu chí: File vẫn đồng bộ bình thường (không can thiệp)
+
+### 2. **Kiểm tra & ghi đè file XML gốc**
+
+**TC4: File XML hợp lệ từ kho gốc được đồng bộ về**
+- ✅ Tiêu chí: Mở ngay lập tức, nội dung đúng như file gốc, thời gian mở <1s
+
+**TC5: File XML bị sửa 1 byte nhưng vẫn giữ tên**
+- ✅ Tiêu chí: Hệ thống nhận diện fake, ghi đè lại nội dung từ kho gốc nhưng giữ nguyên tên file + mốc thời gian
+
+**TC6: File XML fake có MST đúng, nhưng sai 1 trong 3 trường còn lại**
+- ✅ Tiêu chí: Hệ thống nhận diện sai, ghi đè nội dung gốc ngay, log cảnh báo
+
+**TC7: Nhiều file fake xuất hiện cùng lúc (copy hàng loạt)**
+- ✅ Tiêu chí: Tất cả được ghi đè trong vòng ≤1s/file, log sự kiện nhưng không chiếm CPU cao
+
+### 3. **Bảo vệ tiến trình & watchdog**
+
+**TC8: End Task SyncGuard trong Task Manager**
+- ✅ Tiêu chí: BotGuard phát hiện và khởi động lại SyncGuard ≤10s
+
+**TC9: End Task BotGuard**
+- ✅ Tiêu chí: SyncGuard khởi động lại BotGuard ≤10s
+
+**TC10: Người dùng cố gỡ bỏ service trong Services.msc**
+- ✅ Tiêu chí: Bị log cảnh báo + BotGuard/SyncGuard tự phục hồi lại
+
+### 4. **Bảo mật & quản trị**
+
+**TC11: Truy cập WebGUI Syncthing từ máy khác**
+- ✅ Tiêu chí: Phải nhập mật khẩu quản trị (không phải mật khẩu người dùng)
+
+**TC12: Gửi lệnh từ Telegram Bot "status"**
+- ✅ Tiêu chí: Nhận về danh sách service đang chạy + log gần nhất
+
+**TC13: Gửi lệnh từ Telegram Bot "restart sync"**
+- ✅ Tiêu chí: Syncthing được restart, log lại sự kiện
+
+### 5. **Logging & báo cáo**
+
+**TC14: Khi file fake bị ghi đè**
+- ✅ Tiêu chí: Log ghi rõ: thời điểm, tên file, định danh công ty, nguyên nhân (fake → replaced)
+
+**TC15: Khi service bị tắt khởi động lại**
+- ✅ Tiêu chí: Log sự kiện "Service Restarted", lưu vào cả local + gửi qua Bot
+
+### 🎯 **Tiêu chí nghiệm thu tổng thể**
+
+- **Thời gian phản ứng**: phát hiện & xử lý fake ≤1s
+- **Độ ổn định**: Chạy liên tục 72h không crash, không CPU cao bất thường (>20%)
+- **Đồng bộ chuẩn**: XML gốc từ kho → máy client luôn giữ nội dung chuẩn, dù bị thay đổi
+- **Tự phục hồi**: 2 service bảo vệ lẫn nhau, không thể tắt thủ công
+- **Bảo mật**: Quản trị qua WebGUI có mật khẩu riêng, Bot Telegram chỉ chấp nhận từ Master
+- **Log rõ ràng**: Tất cả sự kiện quan trọng đều có trong log + có thể xem từ xa
+
 ## 📊 **Tiêu chí nghiệm thu đã đạt được**
 - ✅ **File hợp lệ mở ≤ 1s** → hiển thị bản gốc
 - ✅ **File sai (fake, sửa byte, sai kỳ, sai số lần, chữ ký giả)** → chặn
