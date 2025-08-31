@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk.Worker">
   <PropertyGroup>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <TargetFramework>net9.0-windows</TargetFramework>
     <UseWindowsService>true</UseWindowsService>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>

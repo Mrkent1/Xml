@@ -3,12 +3,84 @@
   "issued_at": "2025-08-31T00:00:00Z",
   "entries": [
     {
+      "mst": "5702126556",
+      "maToKhai": "842",
+      "ky": "3/2024",
+      "soLan": 0,
+      "sha256": "",
+      "relative_path": "cty Bình Nguyễn Derco/ETAX11320240281480150.xml"
+    },
+    {
+      "mst": "5702126556",
+      "maToKhai": "842",
+      "ky": "3/2025",
+      "soLan": 0,
+      "sha256": "",
+      "relative_path": "cty Bình Nguyễn Derco/ETAX11320250291657164.xml"
+    },
+    {
+      "mst": "5702126556",
+      "maToKhai": "842",
+      "ky": "3/2025",
+      "soLan": 0,
+      "sha256": "",
+      "relative_path": "cty Bình Nguyễn Derco/ETAX11320250312184597.xml"
+    },
+    {
+      "mst": "5702126556",
+      "maToKhai": "842",
+      "ky": "3/2025",
+      "soLan": 0,
+      "sha256": "",
+      "relative_path": "cty Bình Nguyễn Derco/ETAX11320250319918443.xml"
+    },
+    {
+      "mst": "5702126556",
+      "maToKhai": "842",
+      "ky": "3/2025",
+      "soLan": 0,
+      "sha256": "",
+      "relative_path": "cty Bình Nguyễn Derco/ETAX11320250334217929.xml"
+    },
+    {
       "mst": "0123456789",
       "maToKhai": "842",
-      "ky": "03/2024",
+      "ky": "3/2024",
       "soLan": 0,
-      "sha256": "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF",
-      "relative_path": "A/0123456789/842/2024-03/lan0.xml"
+      "sha256": "",
+      "relative_path": "Cty Tiến Bình Yến/ETAX11220250327580499.xml"
+    },
+    {
+      "mst": "0123456789",
+      "maToKhai": "842",
+      "ky": "3/2024",
+      "soLan": 0,
+      "sha256": "",
+      "relative_path": "Cty Tiến Bình Yến/ETAX11320240276057539.xml"
+    },
+    {
+      "mst": "0123456789",
+      "maToKhai": "842",
+      "ky": "3/2025",
+      "soLan": 0,
+      "sha256": "",
+      "relative_path": "Cty Tiến Bình Yến/ETAX11320250287490600.xml"
+    },
+    {
+      "mst": "0123456789",
+      "maToKhai": "842",
+      "ky": "3/2025",
+      "soLan": 0,
+      "sha256": "",
+      "relative_path": "Cty Tiến Bình Yến/ETAX11320250311410922.xml"
+    },
+    {
+      "mst": "0123456789",
+      "maToKhai": "842",
+      "ky": "3/2025",
+      "soLan": 0,
+      "sha256": "",
+      "relative_path": "Cty Tiến Bình Yến/ETAX11320250314485394.xml"
     }
   ]
 }
